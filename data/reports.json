@@ -1,37 +1,37 @@
 [
   {
     "report_date": "2026-05-21",
-    "generated_at_jst": "2026-05-21 03:52:51",
+    "generated_at_jst": "2026-05-21 04:25:53",
     "starting_capital_jpy": 1000000,
     "cash_jpy": 647934,
-    "portfolio_value_jpy": 1000085,
-    "daily_pnl_jpy": 85,
-    "cumulative_pnl_jpy": 85,
-    "usd_jpy": 158.818,
+    "portfolio_value_jpy": 1001994,
+    "daily_pnl_jpy": 1909,
+    "cumulative_pnl_jpy": 1994,
+    "usd_jpy": 158.824,
     "positions": [
       {
         "ticker": "CRWD",
         "name": "CrowdStrike",
         "quantity": 1,
         "avg_price_jpy": 102351.96,
-        "market_value_jpy": 102374,
-        "unrealized_pnl_jpy": 22
+        "market_value_jpy": 103019,
+        "unrealized_pnl_jpy": 667
       },
       {
         "ticker": "AMAT",
         "name": "Applied Materials",
         "quantity": 2,
         "avg_price_jpy": 67218.39,
-        "market_value_jpy": 134428,
-        "unrealized_pnl_jpy": -8
+        "market_value_jpy": 135233,
+        "unrealized_pnl_jpy": 797
       },
       {
         "ticker": "MU",
         "name": "Micron",
         "quantity": 1,
         "avg_price_jpy": 115279.75,
-        "market_value_jpy": 115349,
-        "unrealized_pnl_jpy": 69
+        "market_value_jpy": 115808,
+        "unrealized_pnl_jpy": 528
       }
     ],
     "trade_decisions": [
@@ -39,7 +39,7 @@
         "time": "10:00",
         "action": "buy-watch",
         "ticker": "ASML",
-        "reason": "ASMLが直近変動率6.03%で相対的に強い。寄り後の勢い確認として仮想買い候補。"
+        "reason": "ASMLが直近変動率6.42%で相対的に強い。寄り後の勢い確認として仮想買い候補。"
       },
       {
         "time": "13:00",
@@ -99,20 +99,20 @@
         "name": "Western Digital",
         "theme": "memory_storage",
         "currency": "USD",
-        "last": 459.4800109863281,
+        "last": 458.0400085449219,
         "prev_close": 455.79998779296875,
-        "pct_change": 0.8073767643519414,
-        "volume": 3166698
+        "pct_change": 0.49144818164641446,
+        "volume": 3463773
       },
       "SNDK": {
         "ticker": "SNDK",
         "name": "SanDisk",
         "theme": "memory_storage",
         "currency": "USD",
-        "last": 1395.6800537109375,
+        "last": 1394.6600341796875,
         "prev_close": 1383.2900390625,
-        "pct_change": 0.8956917420467114,
-        "volume": 7729705
+        "pct_change": 0.8219530825865906,
+        "volume": 8009048
       },
       "285A.T": {
         "ticker": "285A.T",
@@ -159,90 +159,90 @@
         "name": "ASML",
         "theme": "semicap_equipment",
         "currency": "USD",
-        "last": 1547.47998046875,
+        "last": 1553.0999755859375,
         "prev_close": 1459.43994140625,
-        "pct_change": 6.0324537217796514,
-        "volume": 1265086
+        "pct_change": 6.417532611135823,
+        "volume": 1317377
       },
       "AMAT": {
         "ticker": "AMAT",
         "name": "Applied Materials",
         "theme": "semicap_equipment",
         "currency": "USD",
-        "last": 423.2149963378906,
+        "last": 425.7349853515625,
         "prev_close": 406.9100036621094,
-        "pct_change": 4.007026745235942,
-        "volume": 3885178
+        "pct_change": 4.6263256051785495,
+        "volume": 4154514
       },
       "MU": {
         "ticker": "MU",
         "name": "Micron",
         "theme": "memory_storage",
         "currency": "USD",
-        "last": 726.2999877929688,
+        "last": 729.1599731445312,
         "prev_close": 698.739990234375,
-        "pct_change": 3.9442421993550747,
-        "volume": 38111921
+        "pct_change": 4.353548291969456,
+        "volume": 40243470
       },
       "NVDA": {
         "ticker": "NVDA",
         "name": "NVIDIA",
         "theme": "ai_compute",
         "currency": "USD",
-        "last": 222.26600646972656,
+        "last": 222.74000549316406,
         "prev_close": 220.61000061035156,
-        "pct_change": 0.7506485901787707,
-        "volume": 101953823
+        "pct_change": 0.9655069475180245,
+        "volume": 111320327
       },
       "TSM": {
         "ticker": "TSM",
         "name": "TSMC ADR",
         "theme": "foundry",
         "currency": "USD",
-        "last": 401.70001220703125,
+        "last": 402.02099609375,
         "prev_close": 392.6099853515625,
-        "pct_change": 2.315281626708776,
-        "volume": 6842536
+        "pct_change": 2.3970380513272938,
+        "volume": 7288162
       },
       "VRT": {
         "ticker": "VRT",
         "name": "Vertiv",
         "theme": "power_cooling",
         "currency": "USD",
-        "last": 316.5993957519531,
+        "last": 317.0799865722656,
         "prev_close": 322.6300048828125,
-        "pct_change": -1.8692028142422323,
-        "volume": 4135365
+        "pct_change": -1.7202424531353788,
+        "volume": 4403142
       },
       "ETN": {
         "ticker": "ETN",
         "name": "Eaton",
         "theme": "power_cooling",
         "currency": "USD",
-        "last": 378.67999267578125,
+        "last": 379.5400085449219,
         "prev_close": 371.8800048828125,
-        "pct_change": 1.8285435365398506,
-        "volume": 1463058
+        "pct_change": 2.0598051956364882,
+        "volume": 1579271
       },
       "CRWD": {
         "ticker": "CRWD",
         "name": "CrowdStrike",
         "theme": "cybersecurity",
         "currency": "USD",
-        "last": 644.60498046875,
+        "last": 648.6400146484375,
         "prev_close": 616.8800048828125,
-        "pct_change": 4.494387136312583,
-        "volume": 2872174
+        "pct_change": 5.148490713628884,
+        "volume": 3133325
       },
       "PANW": {
         "ticker": "PANW",
         "name": "Palo Alto Networks",
         "theme": "cybersecurity",
         "currency": "USD",
-        "last": 246.52999877929688,
+        "last": 247.24000549316406,
         "prev_close": 240.1300048828125,
-        "pct_change": 2.66522040825663,
-        "volume": 5555439
+        "pct_change": 2.9608963752036477,
+        "volume": 6113338
       },
       "7011.T": {
         "ticker": "7011.T",
@@ -277,9 +277,9 @@
     },
     "key_news": [
       {
-        "title": "半導体メモリの日本市場（～2031年）、市場規模（SRAM、MRAM、DRAM）・分析レポートを発表 - アットプレス",
-        "link": "https://news.google.com/rss/articles/CBMiT0FVX3lxTFB5YXlpdExTX21xS0lvZWNGQW43eGUzYUkxbWFUZ01fX0RXWGd6d2lsSUZ5SlVCbHZ0QmFvbU9hYnRqR09fVWFPMUt0UFZLRVE?oc=5",
-        "published": "Mon, 06 Apr 2026 07:00:00 GMT"
+        "title": "価格上昇で関心高まる半導体メモリ、ストレージ関連銘柄をピックアップ！ - 三菱UFJ eスマート証券",
+        "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTE4tLUxaVXRMSHYwVl9jQ1VyemlTZ0NOM2pKUmZlSE1GRDF5b0FZUXBWdVVpNU1rWl81Zl8yaE5LUGtqNERJdzVCZEtYTUF4T2tVaWVjZA?oc=5",
+        "published": "Thu, 12 Feb 2026 08:00:00 GMT"
       },
       {
         "title": "AIデータセンター拡大はストレージにも波及、枯れた技術で恩恵は大きく長く！？ - SBI証券",
