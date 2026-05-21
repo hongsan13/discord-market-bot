@@ -1,9 +1,9 @@
 name: Daily Discord Market Report
 
-"on":
+on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: '*/5 * * * *'
 
 permissions:
   contents: write
@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -29,20 +29,5 @@ jobs:
       - name: Run report
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          STARTING_CAPITAL_JPY: "1000000"
+          STARTING_CAPITAL_JPY: '1000000'
         run: python market_discord_bot.py
-
-      - name: Prepare dashboard files
-        run: |
-          mkdir -p docs/data
-          cp web/index.html docs/index.html
-          sed -i 's|../data/reports.json|./data/reports.json|g' docs/index.html
-          cp data/reports.json docs/data/reports.json
-
-      - name: Commit report history and dashboard data
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add data/reports.json docs/index.html docs/data/reports.json
-          git diff --cached --quiet || git commit -m "Update market report and dashboard"
-          git push
