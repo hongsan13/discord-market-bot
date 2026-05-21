@@ -1,45 +1,45 @@
 [
   {
     "report_date": "2026-05-21",
-    "generated_at_jst": "2026-05-21 04:35:38",
+    "generated_at_jst": "2026-05-21 18:21:37",
     "starting_capital_jpy": 1000000,
     "cash_jpy": 647934,
-    "portfolio_value_jpy": 1002007,
-    "daily_pnl_jpy": 13,
-    "cumulative_pnl_jpy": 2007,
-    "usd_jpy": 158.823,
+    "portfolio_value_jpy": 1003275,
+    "daily_pnl_jpy": 1268,
+    "cumulative_pnl_jpy": 3275,
+    "usd_jpy": 158.933,
     "positions": [
       {
         "ticker": "CRWD",
         "name": "CrowdStrike",
         "quantity": 1,
         "avg_price_jpy": 102351.96,
-        "market_value_jpy": 103138,
-        "unrealized_pnl_jpy": 786
+        "market_value_jpy": 103323,
+        "unrealized_pnl_jpy": 971
       },
       {
         "ticker": "AMAT",
         "name": "Applied Materials",
         "quantity": 2,
         "avg_price_jpy": 67218.39,
-        "market_value_jpy": 135071,
-        "unrealized_pnl_jpy": 634
+        "market_value_jpy": 135681,
+        "unrealized_pnl_jpy": 1244
       },
       {
         "ticker": "MU",
         "name": "Micron",
         "quantity": 1,
         "avg_price_jpy": 115279.75,
-        "market_value_jpy": 115864,
-        "unrealized_pnl_jpy": 584
+        "market_value_jpy": 116337,
+        "unrealized_pnl_jpy": 1057
       }
     ],
     "trade_decisions": [
       {
         "time": "10:00",
         "action": "buy-watch",
-        "ticker": "ASML",
-        "reason": "ASMLが直近変動率6.41%で相対的に強い。寄り後の勢い確認として仮想買い候補。"
+        "ticker": "285A.T",
+        "reason": "Kioxiaが直近変動率7.90%で相対的に強い。寄り後の勢い確認として仮想買い候補。"
       },
       {
         "time": "13:00",
@@ -55,24 +55,24 @@
       }
     ],
     "theme_scores": {
-      "半導体メモリ/ストレージ": "hold-watch",
-      "半導体製造装置": "hold-watch",
+      "半導体メモリ/ストレージ": "buy-watch",
+      "半導体製造装置": "buy-watch",
       "AI計算基盤": "hold-watch",
       "ファウンドリ": "hold-watch",
       "データセンター電力/冷却": "neutral",
       "サイバーセキュリティ": "buy-watch",
-      "防衛/宇宙": "weak-watch"
+      "防衛/宇宙": "hold-watch"
     },
     "next_day_outlook": {
-      "overall_bias": "high-volatility",
+      "overall_bias": "bullish",
       "theme_bias": {
-        "半導体メモリ/ストレージ": "hold-watch",
-        "半導体製造装置": "hold-watch",
+        "半導体メモリ/ストレージ": "buy-watch",
+        "半導体製造装置": "buy-watch",
         "AI計算基盤": "hold-watch",
         "ファウンドリ": "hold-watch",
         "データセンター電力/冷却": "neutral",
         "サイバーセキュリティ": "buy-watch",
-        "防衛/宇宙": "weak-watch"
+        "防衛/宇宙": "hold-watch"
       },
       "bullish_triggers": [
         "SOX指数・NASDAQの上昇継続",
@@ -99,202 +99,197 @@
         "name": "Western Digital",
         "theme": "memory_storage",
         "currency": "USD",
-        "last": 457.760009765625,
+        "last": 459.6199951171875,
         "prev_close": 455.79998779296875,
-        "pct_change": 0.43001799586412925,
-        "volume": 3661641
+        "pct_change": 0.8380885095490287,
+        "volume": 5304400
       },
       "SNDK": {
         "ticker": "SNDK",
         "name": "SanDisk",
         "theme": "memory_storage",
         "currency": "USD",
-        "last": 1395.760009765625,
+        "last": 1392.56005859375,
         "prev_close": 1383.2900390625,
-        "pct_change": 0.9014718787085485,
-        "volume": 8088417
+        "pct_change": 0.6701428673290044,
+        "volume": 9084700
       },
       "285A.T": {
         "ticker": "285A.T",
         "name": "Kioxia",
         "theme": "memory_storage",
         "currency": "JPY",
-        "last": 51290.0,
-        "prev_close": 49770.0,
-        "pct_change": 3.05404862366887,
-        "volume": 31479300
+        "last": 55340.0,
+        "prev_close": 51290.0,
+        "pct_change": 7.896276077208042,
+        "volume": 55514600
       },
       "8035.T": {
         "ticker": "8035.T",
         "name": "Tokyo Electron",
         "theme": "semicap_equipment",
         "currency": "JPY",
-        "last": 46100.0,
-        "prev_close": 47160.0,
-        "pct_change": -2.247667514843088,
-        "volume": 3042100
+        "last": 48800.0,
+        "prev_close": 46100.0,
+        "pct_change": 5.856832971800441,
+        "volume": 2745800
       },
       "6857.T": {
         "ticker": "6857.T",
         "name": "Advantest",
         "theme": "semicap_equipment",
         "currency": "JPY",
-        "last": 25625.0,
-        "prev_close": 25290.0,
-        "pct_change": 1.3246342427837066,
-        "volume": 8881700
+        "last": 26745.0,
+        "prev_close": 25625.0,
+        "pct_change": 4.370731707317077,
+        "volume": 9851300
       },
       "6146.T": {
         "ticker": "6146.T",
         "name": "Disco",
         "theme": "semicap_equipment",
         "currency": "JPY",
-        "last": 61340.0,
-        "prev_close": 61600.0,
-        "pct_change": -0.4220779220779236,
-        "volume": 1743500
+        "last": 65650.0,
+        "prev_close": 61340.0,
+        "pct_change": 7.026410172807296,
+        "volume": 2084200
       },
       "ASML": {
         "ticker": "ASML",
         "name": "ASML",
         "theme": "semicap_equipment",
         "currency": "USD",
-        "last": 1553.02001953125,
+        "last": 1550.1300048828125,
         "prev_close": 1459.43994140625,
-        "pct_change": 6.412054067454842,
-        "volume": 1336931
+        "pct_change": 6.214031897001382,
+        "volume": 1742000
       },
       "AMAT": {
         "ticker": "AMAT",
         "name": "Applied Materials",
         "theme": "semicap_equipment",
         "currency": "USD",
-        "last": 425.2250061035156,
+        "last": 426.8500061035156,
         "prev_close": 406.9100036621094,
-        "pct_change": 4.500995865566071,
-        "volume": 4263274
+        "pct_change": 4.900347069855782,
+        "volume": 6881500
       },
       "MU": {
         "ticker": "MU",
         "name": "Micron",
         "theme": "memory_storage",
         "currency": "USD",
-        "last": 729.52001953125,
+        "last": 731.989990234375,
         "prev_close": 698.739990234375,
-        "pct_change": 4.405076241099448,
-        "volume": 40857328
+        "pct_change": 4.758565484257904,
+        "volume": 48474400
       },
       "NVDA": {
         "ticker": "NVDA",
         "name": "NVIDIA",
         "theme": "ai_compute",
         "currency": "USD",
-        "last": 223.14999389648438,
+        "last": 223.47000122070312,
         "prev_close": 220.61000061035156,
-        "pct_change": 1.1513500199925364,
-        "volume": 114207328
+        "pct_change": 1.296405694410474,
+        "volume": 180498100
       },
       "TSM": {
         "ticker": "TSM",
         "name": "TSMC ADR",
         "theme": "foundry",
         "currency": "USD",
-        "last": 402.04998779296875,
+        "last": 401.6199951171875,
         "prev_close": 392.6099853515625,
-        "pct_change": 2.404422402286377,
-        "volume": 7465109
+        "pct_change": 2.294900818061718,
+        "volume": 10224200
       },
       "VRT": {
         "ticker": "VRT",
         "name": "Vertiv",
         "theme": "power_cooling",
         "currency": "USD",
-        "last": 316.1700134277344,
+        "last": 315.6700134277344,
         "prev_close": 322.6300048828125,
-        "pct_change": -2.0022909702476555,
-        "volume": 4541526
+        "pct_change": -2.1572672565300266,
+        "volume": 5995500
       },
       "ETN": {
         "ticker": "ETN",
         "name": "Eaton",
         "theme": "power_cooling",
         "currency": "USD",
-        "last": 379.5950012207031,
+        "last": 379.69000244140625,
         "prev_close": 371.8800048828125,
-        "pct_change": 2.07459294304404,
-        "volume": 1625751
+        "pct_change": 2.100139145973934,
+        "volume": 2682000
       },
       "CRWD": {
         "ticker": "CRWD",
         "name": "CrowdStrike",
         "theme": "cybersecurity",
         "currency": "USD",
-        "last": 649.3900146484375,
+        "last": 650.1099853515625,
         "prev_close": 616.8800048828125,
-        "pct_change": 5.270070274331684,
-        "volume": 3227202
+        "pct_change": 5.386781903404803,
+        "volume": 4376400
       },
       "PANW": {
         "ticker": "PANW",
         "name": "Palo Alto Networks",
         "theme": "cybersecurity",
         "currency": "USD",
-        "last": 246.72999572753906,
+        "last": 246.66000366210938,
         "prev_close": 240.1300048828125,
-        "pct_change": 2.7485073545671534,
-        "volume": 6369561
+        "pct_change": 2.7193597828324867,
+        "volume": 8692300
       },
       "7011.T": {
         "ticker": "7011.T",
         "name": "Mitsubishi Heavy Industries",
         "theme": "defense_space",
         "currency": "JPY",
-        "last": 4024.0,
-        "prev_close": 4126.0,
-        "pct_change": -2.4721279689772224,
-        "volume": 20144300
+        "last": 3958.0,
+        "prev_close": 4024.0,
+        "pct_change": -1.640159045725642,
+        "volume": 28538600
       },
       "7012.T": {
         "ticker": "7012.T",
         "name": "Kawasaki Heavy Industries",
         "theme": "defense_space",
         "currency": "JPY",
-        "last": 2809.0,
-        "prev_close": 2849.0,
-        "pct_change": -1.4040014040014093,
-        "volume": 10575900
+        "last": 2843.5,
+        "prev_close": 2809.0,
+        "pct_change": 1.2281950872196523,
+        "volume": 12532100
       },
       "7013.T": {
         "ticker": "7013.T",
         "name": "IHI",
         "theme": "defense_space",
         "currency": "JPY",
-        "last": 2554.5,
-        "prev_close": 2561.0,
-        "pct_change": -0.25380710659898,
-        "volume": 19995200
+        "last": 2675.0,
+        "prev_close": 2554.5,
+        "pct_change": 4.717165785868072,
+        "volume": 21342900
       }
     },
     "key_news": [
-      {
-        "title": "価格上昇で関心高まる半導体メモリ、ストレージ関連銘柄をピックアップ！ - 三菱UFJ eスマート証券",
-        "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTE4tLUxaVXRMSHYwVl9jQ1VyemlTZ0NOM2pKUmZlSE1GRDF5b0FZUXBWdVVpNU1rWl81Zl8yaE5LUGtqNERJdzVCZEtYTUF4T2tVaWVjZA?oc=5",
-        "published": "Thu, 12 Feb 2026 08:00:00 GMT"
-      },
       {
         "title": "AIデータセンター拡大はストレージにも波及、枯れた技術で恩恵は大きく長く！？ - SBI証券",
         "link": "https://news.google.com/rss/articles/CBMifEFVX3lxTE5mSlJ4V2Z5ZVRjZlBGRm9VOERIMjVVclRUQ1NFNW94dlpubW0ybDdmN2tFekpNMVBLMmRUNWtoakgtT0tOdWROeTNYd1lwWTlKaXpPSkZuSGZPUmxyUUtWQ0NONktmT250SlY5akVjYjdqNmdRVlBCa2JNM2U?oc=5",
         "published": "Wed, 26 Nov 2025 08:00:00 GMT"
       },
       {
+        "title": "価格上昇で関心高まる半導体メモリ、ストレージ関連銘柄をピックアップ！ - 三菱UFJ eスマート証券",
+        "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTE4tLUxaVXRMSHYwVl9jQ1VyemlTZ0NOM2pKUmZlSE1GRDF5b0FZUXBWdVVpNU1rWl81Zl8yaE5LUGtqNERJdzVCZEtYTUF4T2tVaWVjZA?oc=5",
+        "published": "Thu, 12 Feb 2026 08:00:00 GMT"
+      },
+      {
         "title": "マイクロン、中国データセンター撤退とAI半導体協議が示す成長リスクと機会 - simplywall.st",
         "link": "https://news.google.com/rss/articles/CBMioAFBVV95cUxQMEFsY2ZKRlBaSHZYUFl4M05NNl80Wk5oazJQUjUwSUo3dmU1cEthQkt2SzJQZy0wYUdVVHhtTy03MEZRNHo0d1N6clQ3VGRqQktfR1d4Q09Pa1JtQ2F2VTVsWldodDg3X3luVWN1MDNOTUE5U3o1RTdqNG80cVFla3RDS0lwRFc1eGZIcjJxQlNXdExQZGpFNTZHOXJJRmVu0gGmAUFVX3lxTE5xSWVFd0QtcDNlTFljOGZpSUlzVjlpWk5PelNkV01MVkMtazlNX29PWE15YlJENmlTUzhqQ1pScmtxanBEYjVLTnRiVTVSaFlhNGpEd0xzY01PS2tfekJWY2hsa1A1Tko4NEEzeUg5TWpmYVNDZ1B3UW9lVndqb09GTkU5ZVlEcm8xSjBqVzFDUEduenp4QjBDS2x5MFVHc1UwemhYWVE?oc=5",
         "published": "Sun, 17 May 2026 04:43:21 GMT"
-      },
-      {
-        "title": "「記録的な増収増益」キオクシア最終利益5544億円で過去最高を更新 背景にAI向け大規模データセンターの建設ラッシュ - au Webポータル",
-        "link": "https://news.google.com/rss/articles/CBMie0FVX3lxTE5YSHVMNUs3Q3ZPb0JxdEgybmNUQmZNa1l4Z2ZESU5pMDh1Sy1iaTFhZldia01iUVV3MUZiVTRHMEZ3VTdOVTBJNlpHcUF2c04tYk1UZ1FQU3JBYy1kV0xqSGhic29Td3AwQVFseVFTUERGZk5pcUFIVlQ1UQ?oc=5",
-        "published": "Fri, 15 May 2026 10:11:00 GMT"
       },
       {
         "title": "Top 10 U.S. AI Semiconductor Stocks: Future Outlook and Growth Rate Rankings - Moomoo",
@@ -308,13 +303,23 @@
       },
       {
         "title": "AI drives Indonesia data centre demand, liquid cooling emerges as key - IDNFinancials.com",
-        "link": "https://news.google.com/rss/articles/CBMiuAFBVV95cUxORkNGbnF1QVhYaDBrNTRNMVFyTGxPUmpMakNTU1lKZ0NONGt2UE5jVjktRVFSYTRublN3T01tOXFuR05SMW41RDBBMnNxYmpVbldyM2xOQnZJZHVJelJ0OXZYRXladFFmeFRpVzFDX0dDN2YyRHQ4RG9yOC1aLUhfcUVGVmJLNHFBNjlQMVZta1VDT29Ld1MtalRpRW4zMWR5VWFrOHVLdndTUlhkQlcyZEpfWTNjUEZr?oc=5",
+        "link": "https://news.google.com/rss/articles/CBMitwFBVV95cUxObVNzRHBPcmY1bjZyc2lQX1hNUFZ1Z2tGMHQxMWpHRERONjRFTDViLVJ6eTk0UXo5MGpUbXNxVDljZHNKNGVuU29mQmVPT2hrQjRVVUdtNEQzVEV2NVpzMFdsa0cwLTl0SkhEWDNyM1VzN0ltTXhRcnZINFZrRm91S0VtSDdaRmRyenJBNXhVYjVSMnQwajBDZ1M1dTI2LThMU0l3WG1HSVd3aWdJZ2JnNks0b1p4Wm8?oc=5",
         "published": "Wed, 20 May 2026 10:00:00 GMT"
       },
       {
         "title": "Compal and Exascale Collaborate to Showcase Integrated AI Infrastructure Solution at COMPUTEX 2026 - 共同通信PRワイヤー",
         "link": "https://news.google.com/rss/articles/CBMiW0FVX3lxTE8xOElnaHoyRTNWTGR6bzZMWV9sazJJcmlfZEZJMVNPS3pBWXAzaG5MNTNNdF9ZNHN5OTRuM1VGekFqNGtXWGVQVV9UTngyQlhXRDNVNXo1bGVIRjA?oc=5",
         "published": "Wed, 20 May 2026 01:15:14 GMT"
+      },
+      {
+        "title": "CybersecurityのHorizon3.ai、米国防総省向けサイバー防衛市場で採用可能認定を取得 - atpartners.co.jp",
+        "link": "https://news.google.com/rss/articles/CBMi7gFBVV95cUxPcUdKMFlCRldFMWtHaGtsM3dMcDNtWURJOS1fbjdKdUJVc1VYT0NuMjFCWS0tSmMwYk5YRWFuZkdCU0F5WmlCN2pTZzBDbjlEajNLcERYdXFnX3RvcUpFNkUzU19pbGZ6MEdxX19VbDZnR1JNd3RJTVdBQlZvQmxoTVJWdnhDYkUxV0NzaEZ2Skg2U3k0OWs5cGlnN2ZKZTJ6YWNnaENuN1l3eV81VXFuOXBnUm5TM0lHb0F0MHRncGNVWVdjeUExU0NtZzNnakhQWjFteVh6ZGd6U201czZnY3lCelVGM3FReV9ZYmpB?oc=5",
+        "published": "Mon, 18 May 2026 06:25:34 GMT"
+      },
+      {
+        "title": "The State of AI Cybersecurity 2026 - Darktrace",
+        "link": "https://news.google.com/rss/articles/CBMifEFVX3lxTFBMNWtRNHljOGtBLVpnT2VhcE1Td3k3bWRubmFicVQxREljYkxzQzdpR1R4QUpmQmhlZnY4MDA3RXZlZVRhaHhmdVFUSlQ2bTdtT09yN1N5bC1reFZCUTBsd2h5dXdpX21yZV9wYlJ2WHRQRjBCUVRBeVIzbmE?oc=5",
+        "published": "Tue, 10 Mar 2026 01:29:42 GMT"
       }
     ],
     "risks": [
