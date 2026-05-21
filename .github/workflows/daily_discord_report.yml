@@ -3,7 +3,7 @@ name: Daily Discord Market Report
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '0 12 * * *'
 
 permissions:
   contents: write
