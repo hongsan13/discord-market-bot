@@ -1,9 +1,9 @@
 name: Daily Discord Market Report
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 12 * * *'
+    - cron: "0 12 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,15 +19,51 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Check Python syntax and invalid spaces
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("market_discord_bot.py")
+          text = path.read_text(encoding="utf-8")
+
+          bad_lines = []
+          for i, line in enumerate(text.splitlines(), start=1):
+              if "\u3000" in line:
+                  bad_lines.append(i)
+
+          if bad_lines:
+              print(f"Full-width spaces U+3000 found in lines: {bad_lines}")
+              raise SystemExit(1)
+
+          import py_compile
+          py_compile.compile("market_discord_bot.py", doraise=True)
+          print("Syntax check passed.")
+          PY
+
       - name: Run report
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          STARTING_CAPITAL_JPY: '1000000'
-        run: python market_discord_bot.py
+        run: |
+          python market_discord_bot.py
+
+      - name: Commit report data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/reports.json docs/data/reports.json
+
+          if git diff --cached --quiet; then
+            echo "No report changes to commit."
+          else
+            git commit -m "Update daily market report"
+            git push
+          fi
