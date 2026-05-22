@@ -2,7 +2,10 @@ name: Daily Discord Market Report
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    # JST 09:00-翌05:45 = UTC 00:00-20:45
+    - cron: "*/15 0-20 * * *"
+    # JST 翌06:00 = UTC 21:00
+    - cron: "0 21 * * *"
   workflow_dispatch:
 
 permissions:
@@ -30,6 +33,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import py_compile
 
           path = Path("market_discord_bot.py")
           text = path.read_text(encoding="utf-8")
@@ -43,12 +47,11 @@ jobs:
               print(f"Full-width spaces U+3000 found in lines: {bad_lines}")
               raise SystemExit(1)
 
-          import py_compile
           py_compile.compile("market_discord_bot.py", doraise=True)
           print("Syntax check passed.")
           PY
 
-      - name: Run report
+      - name: Run market bot
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
@@ -64,6 +67,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No report changes to commit."
           else
-            git commit -m "Update daily market report"
+            git commit -m "Update market report data"
             git push
           fi
