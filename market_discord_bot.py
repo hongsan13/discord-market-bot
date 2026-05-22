@@ -257,19 +257,18 @@ for time_label in decision_times:
         decisions.append({"time": time_label, "action": action, "ticker": ticker, "reason": reason})
 
     # 仮想買い: 既存が少なく、現金があれば上位候補を追加
-    # 仮想買い: 既存が少なく、現金があれば上位候補を追加
-    positions = portfolio.get("positions", [])
-    held = {p["ticker"] for p in positions}
-    max_positions = 3
+　　　　positions = portfolio.get("positions", [])
+　　　　held = {p["ticker"] for p in positions}
+　　　　max_positions = 3
 
-    for cand in target_names:
-        if len(positions) >= max_positions:
+　　　　for cand in target_names:
+　　　　　if len(positions) >= max_positions:
             break
 
-        if cand["ticker"] in held:
+　　　　　if cand["ticker"] in held:
             continue
 
-        if cand["pct_change"] is None or cand["pct_change"] < 1.0:
+　　　　　if cand["pct_change"] is None or cand["pct_change"] < 1.0:
             continue
 
         last_jpy = to_jpy(cand["last"], cand["currency"], usd_jpy)
