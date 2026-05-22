@@ -6,84 +6,313 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
-      font-family: system-ui, sans-serif;
-      margin: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
       background: #0f172a;
       color: #e5e7eb;
     }
+
+    header {
+      padding: 24px;
+      border-bottom: 1px solid #334155;
+      background: #020617;
+    }
+
+    main {
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 20px;
+      color: #bfdbfe;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .summary-card {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .summary-label {
+      color: #94a3b8;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .summary-value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
     .card {
       background: #111827;
-      border: 1px solid #374151;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 16px;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
     }
+
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 12px;
+      font-size: 14px;
     }
+
     th, td {
-      border-bottom: 1px solid #374151;
-      padding: 8px;
+      border-bottom: 1px solid #334155;
+      padding: 10px 8px;
       text-align: left;
+      white-space: nowrap;
     }
+
     th {
       color: #93c5fd;
+      font-weight: 600;
     }
+
+    tr:hover {
+      background: #1e293b;
+    }
+
     .plus {
       color: #86efac;
     }
+
     .minus {
       color: #fca5a5;
+    }
+
+    .neutral {
+      color: #cbd5e1;
+    }
+
+    .muted {
+      color: #94a3b8;
+    }
+
+    .notice {
+      color: #fbbf24;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    ul {
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
     }
   </style>
 </head>
 <body>
-  <h1>Discord Market Bot Dashboard</h1>
+  <header>
+    <h1>Discord Market Bot Dashboard</h1>
+    <div class="subtitle">AI / Semiconductor Infrastructure Watch & 1,000,000 JPY Paper Trade</div>
+  </header>
 
-  <div class="card">
-    <h2>Latest Report</h2>
-    <div id="summary">Loading...</div>
-  </div>
+  <main>
+    <section class="summary-grid" id="summaryGrid">
+      <div class="summary-card">
+        <div class="summary-label">Loading</div>
+        <div class="summary-value">-</div>
+      </div>
+    </section>
 
-  <div class="card">
-    <h2>Market Watch</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Ticker</th>
-          <th>Name</th>
-          <th>Theme</th>
-          <th>Price</th>
-          <th>Change</th>
-        </tr>
-      </thead>
-      <tbody id="market"></tbody>
-    </table>
-  </div>
+    <section class="card">
+      <h2>Latest Report</h2>
+      <div id="latestInfo">Loading...</div>
+      <div class="notice">実売買なし。GitHub Actions上のペーパートレード記録のみ。</div>
+    </section>
 
-  <div class="card">
-    <h2>Paper Portfolio</h2>
-    <div id="portfolio"></div>
-  </div>
+    <section class="card">
+      <h2>Paper Portfolio</h2>
+      <div id="portfolio"></div>
+    </section>
+
+    <section class="card">
+      <h2>Market Watch</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Name</th>
+              <th>Theme</th>
+              <th>Price</th>
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody id="market"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Recent Decisions</h2>
+      <div id="decisions"></div>
+    </section>
+  </main>
 
   <script>
     function yen(value) {
-      if (value === null || value === undefined) return "-";
+      if (value === null || value === undefined || Number.isNaN(value)) return "-";
       return Math.round(value).toLocaleString("ja-JP") + "円";
     }
 
     function pct(value) {
-      if (value === null || value === undefined) return "-";
+      if (value === null || value === undefined || Number.isNaN(value)) return "-";
       const sign = value >= 0 ? "+" : "";
-      return sign + value.toFixed(2) + "%";
+      return sign + Number(value).toFixed(2) + "%";
     }
 
     function price(value, currency) {
-      if (value === null || value === undefined) return "-";
+      if (value === null || value === undefined || Number.isNaN(value)) return "-";
       if (currency === "JPY") return Math.round(value).toLocaleString("ja-JP") + "円";
-      return value.toFixed(2) + "ドル";
+      return Number(value).toFixed(2) + "ドル";
+    }
+
+    function signedYen(value) {
+      if (value === null || value === undefined || Number.isNaN(value)) return "-";
+      const sign = value >= 0 ? "+" : "";
+      return sign + Math.round(value).toLocaleString("ja-JP") + "円";
+    }
+
+    function valueClass(value) {
+      if (value === null || value === undefined || Number.isNaN(value)) return "neutral";
+      if (value > 0) return "plus";
+      if (value < 0) return "minus";
+      return "neutral";
+    }
+
+    function renderSummary(latest, previous) {
+      const p = latest.portfolio;
+      let dailyDelta = null;
+
+      if (previous && previous.portfolio && previous.portfolio.total_value !== undefined) {
+        dailyDelta = p.total_value - previous.portfolio.total_value;
+      }
+
+      const cards = [
+        ["総資産", yen(p.total_value), valueClass(p.pnl_jpy)],
+        ["損益", signedYen(p.pnl_jpy), valueClass(p.pnl_jpy)],
+        ["損益率", pct(p.pnl_pct), valueClass(p.pnl_pct)],
+        ["前回比", dailyDelta === null ? "-" : signedYen(dailyDelta), valueClass(dailyDelta)],
+        ["現金", yen(p.cash), "neutral"],
+        ["保有評価額", yen(p.position_value), "neutral"],
+        ["USD/JPY", latest.usd_jpy ? Number(latest.usd_jpy).toFixed(2) : "-", "neutral"],
+        ["最終更新", latest.date + " " + latest.time, "neutral"]
+      ];
+
+      const grid = document.getElementById("summaryGrid");
+      grid.innerHTML = "";
+
+      cards.forEach(([label, value, cls]) => {
+        const div = document.createElement("div");
+        div.className = "summary-card";
+        div.innerHTML = `
+          <div class="summary-label">${label}</div>
+          <div class="summary-value ${cls}">${value}</div>
+        `;
+        grid.appendChild(div);
+      });
+    }
+
+    function renderLatest(latest) {
+      document.getElementById("latestInfo").innerHTML = `
+        <p>更新日時: ${latest.date} ${latest.time} JST</p>
+        <p>監視対象: ${latest.universe}</p>
+        <p>ペーパートレード: ${latest.paper_trade ? "有効" : "無効"}</p>
+        <p>実売買: ${latest.real_trade ? "あり" : "なし"}</p>
+      `;
+    }
+
+    function renderPortfolio(latest) {
+      const p = latest.portfolio;
+      let html = "";
+
+      html += `<p>総資産: <span class="${valueClass(p.pnl_jpy)}">${yen(p.total_value)}</span></p>`;
+      html += `<p>現金: ${yen(p.cash)}</p>`;
+      html += `<p>保有評価額: ${yen(p.position_value)}</p>`;
+      html += `<p>損益: <span class="${valueClass(p.pnl_jpy)}">${signedYen(p.pnl_jpy)} (${pct(p.pnl_pct)})</span></p>`;
+
+      if (p.positions && p.positions.length > 0) {
+        html += "<h3>保有中</h3>";
+        html += "<ul>";
+        p.positions.forEach(pos => {
+          html += `<li>${pos.ticker}: ${pos.qty}株 / 評価 ${yen(pos.market_value_jpy)} / 損益 <span class="${valueClass(pos.pnl_jpy)}">${signedYen(pos.pnl_jpy)} (${pct(pos.pnl_pct)})</span></li>`;
+        });
+        html += "</ul>";
+      } else {
+        html += `<p class="muted">現在の保有銘柄なし。</p>`;
+      }
+
+      document.getElementById("portfolio").innerHTML = html;
+    }
+
+    function renderMarket(latest) {
+      const marketBody = document.getElementById("market");
+      marketBody.innerHTML = "";
+
+      latest.market_data.forEach(row => {
+        const cls = valueClass(row.pct_change);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.ticker}</td>
+          <td>${row.name}</td>
+          <td>${row.theme}</td>
+          <td>${price(row.last, row.currency)}</td>
+          <td class="${cls}">${pct(row.pct_change)}</td>
+        `;
+        marketBody.appendChild(tr);
+      });
+    }
+
+    function renderDecisions(latest) {
+      const decisions = latest.decisions || [];
+      const box = document.getElementById("decisions");
+
+      if (decisions.length === 0) {
+        box.innerHTML = `<p class="muted">判断記録なし。</p>`;
+        return;
+      }
+
+      let html = "<ul>";
+      decisions.forEach(item => {
+        html += `<li>${item.action}: ${item.ticker} - ${item.reason}</li>`;
+      });
+      html += "</ul>";
+
+      box.innerHTML = html;
     }
 
     async function main() {
@@ -92,50 +321,28 @@
       const latest = data.latest;
 
       if (!latest) {
-        document.getElementById("summary").textContent = "No report yet.";
+        document.getElementById("summaryGrid").innerHTML = `
+          <div class="summary-card">
+            <div class="summary-label">No report</div>
+            <div class="summary-value">-</div>
+          </div>
+        `;
+        document.getElementById("latestInfo").textContent = "No report yet.";
         return;
       }
 
-      document.getElementById("summary").innerHTML =
-        `<p>${latest.date} ${latest.time} JST</p>
-         <p>USD/JPY: ${latest.usd_jpy.toFixed(2)}</p>
-         <p>実売買: ${latest.real_trade ? "あり" : "なし"}</p>`;
+      const reports = data.reports || [];
+      const previous = reports.length >= 2 ? reports[reports.length - 2] : null;
 
-      const marketBody = document.getElementById("market");
-      marketBody.innerHTML = "";
-
-      latest.market_data.forEach(row => {
-        const cls = row.pct_change >= 0 ? "plus" : "minus";
-        const tr = document.createElement("tr");
-        tr.innerHTML =
-          `<td>${row.ticker}</td>
-           <td>${row.name}</td>
-           <td>${row.theme}</td>
-           <td>${price(row.last, row.currency)}</td>
-           <td class="${cls}">${pct(row.pct_change)}</td>`;
-        marketBody.appendChild(tr);
-      });
-
-      const p = latest.portfolio;
-      let html = "";
-      html += `<p>総資産: ${yen(p.total_value)}</p>`;
-      html += `<p>現金: ${yen(p.cash)}</p>`;
-      html += `<p>評価額: ${yen(p.position_value)}</p>`;
-      html += `<p>損益: ${yen(p.pnl_jpy)} (${pct(p.pnl_pct)})</p>`;
-
-      if (p.positions.length > 0) {
-        html += "<ul>";
-        p.positions.forEach(pos => {
-          html += `<li>${pos.ticker}: ${pos.qty}株 / 評価 ${yen(pos.market_value_jpy)} / 損益 ${yen(pos.pnl_jpy)} (${pct(pos.pnl_pct)})</li>`;
-        });
-        html += "</ul>";
-      }
-
-      document.getElementById("portfolio").innerHTML = html;
+      renderSummary(latest, previous);
+      renderLatest(latest);
+      renderPortfolio(latest);
+      renderMarket(latest);
+      renderDecisions(latest);
     }
 
     main().catch(error => {
-      document.getElementById("summary").textContent = error.toString();
+      document.getElementById("latestInfo").textContent = error.toString();
     });
   </script>
 </body>
