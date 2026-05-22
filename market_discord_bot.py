@@ -220,7 +220,14 @@ def simulate_paper_trade(
     target_names = pick_trade_universe(price_data)
 
     decisions = []
-    for time_label in ["10:00", "13:00", "16:00"]:
+    decision_times = [
+    "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
+    "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
+    "22:00", "23:00", "00:00", "01:00", "02:00", "03:00",
+    "04:00", "05:00", "06:00", "09:00"
+]
+
+for time_label in decision_times:
         action = "no trade"
         ticker = "-"
         reason = "新規材料が弱く、仮想取引は見送り。"
