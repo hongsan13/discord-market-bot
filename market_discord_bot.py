@@ -257,6 +257,7 @@ for time_label in decision_times:
         decisions.append({"time": time_label, "action": action, "ticker": ticker, "reason": reason})
 
     # 仮想買い: 既存が少なく、現金があれば上位候補を追加
+    positions = portfolio.get("positions", [])
     held = {p["ticker"] for p in positions}
     max_positions = 3
     for cand in target_names:
