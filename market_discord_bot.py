@@ -22,22 +22,46 @@ ALERT_DAY_DROP_PCT = -6.0
 ALERT_COOLDOWN_MINUTES = 180
 
 WATCHLIST = [
+    # memory / storage
+    {"ticker": "WDC", "name": "Western Digital", "currency": "USD", "theme": "メモリ・ストレージ"},
+    {"ticker": "SNDK", "name": "SanDisk", "currency": "USD", "theme": "メモリ・ストレージ"},
+    {"ticker": "285A.T", "name": "Kioxia", "currency": "JPY", "theme": "メモリ・ストレージ"},
+    {"ticker": "MU", "name": "Micron", "currency": "USD", "theme": "メモリ・ストレージ"},
+    {"ticker": "STX", "name": "Seagate", "currency": "USD", "theme": "ストレージ"},
+
+    # AI compute / cloud / server
     {"ticker": "NVDA", "name": "NVIDIA", "currency": "USD", "theme": "AI半導体"},
     {"ticker": "AMD", "name": "AMD", "currency": "USD", "theme": "AI半導体"},
-    {"ticker": "AVGO", "name": "Broadcom", "currency": "USD", "theme": "AI/ネットワーク"},
-    {"ticker": "TSM", "name": "TSMC", "currency": "USD", "theme": "ファウンドリ"},
-    {"ticker": "ASML", "name": "ASML", "currency": "USD", "theme": "半導体製造装置"},
-    {"ticker": "AMAT", "name": "Applied Materials", "currency": "USD", "theme": "半導体製造装置"},
-    {"ticker": "MU", "name": "Micron", "currency": "USD", "theme": "メモリ"},
-    {"ticker": "WDC", "name": "Western Digital", "currency": "USD", "theme": "ストレージ"},
-    {"ticker": "STX", "name": "Seagate", "currency": "USD", "theme": "ストレージ"},
+    {"ticker": "AVGO", "name": "Broadcom", "currency": "USD", "theme": "AI・ネットワーク"},
     {"ticker": "SMCI", "name": "Super Micro Computer", "currency": "USD", "theme": "AIサーバー"},
-    {"ticker": "VRT", "name": "Vertiv", "currency": "USD", "theme": "データセンター電源/冷却"},
     {"ticker": "DELL", "name": "Dell", "currency": "USD", "theme": "AIサーバー"},
-    {"ticker": "ANET", "name": "Arista Networks", "currency": "USD", "theme": "データセンターネットワーク"},
     {"ticker": "MSFT", "name": "Microsoft", "currency": "USD", "theme": "AIクラウド"},
     {"ticker": "GOOGL", "name": "Alphabet", "currency": "USD", "theme": "AIクラウド"},
     {"ticker": "AMZN", "name": "Amazon", "currency": "USD", "theme": "AIクラウド"},
+
+    # foundry
+    {"ticker": "TSM", "name": "TSMC ADR", "currency": "USD", "theme": "ファウンドリ"},
+
+    # semiconductor equipment
+    {"ticker": "8035.T", "name": "Tokyo Electron", "currency": "JPY", "theme": "半導体製造装置"},
+    {"ticker": "6857.T", "name": "Advantest", "currency": "JPY", "theme": "半導体製造装置"},
+    {"ticker": "6146.T", "name": "Disco", "currency": "JPY", "theme": "半導体製造装置"},
+    {"ticker": "ASML", "name": "ASML", "currency": "USD", "theme": "半導体製造装置"},
+    {"ticker": "AMAT", "name": "Applied Materials", "currency": "USD", "theme": "半導体製造装置"},
+
+    # data center infrastructure
+    {"ticker": "VRT", "name": "Vertiv", "currency": "USD", "theme": "データセンター電源・冷却"},
+    {"ticker": "ETN", "name": "Eaton", "currency": "USD", "theme": "データセンター電源・冷却"},
+    {"ticker": "ANET", "name": "Arista Networks", "currency": "USD", "theme": "データセンターネットワーク"},
+
+    # cybersecurity
+    {"ticker": "CRWD", "name": "CrowdStrike", "currency": "USD", "theme": "サイバーセキュリティ"},
+    {"ticker": "PANW", "name": "Palo Alto Networks", "currency": "USD", "theme": "サイバーセキュリティ"},
+
+    # defense / space
+    {"ticker": "7011.T", "name": "Mitsubishi Heavy Industries", "currency": "JPY", "theme": "防衛・宇宙"},
+    {"ticker": "7012.T", "name": "Kawasaki Heavy Industries", "currency": "JPY", "theme": "防衛・宇宙"},
+    {"ticker": "7013.T", "name": "IHI", "currency": "JPY", "theme": "防衛・宇宙"},
 ]
 
 
