@@ -22,14 +22,12 @@ ALERT_DAY_DROP_PCT = -6.0
 ALERT_COOLDOWN_MINUTES = 180
 
 WATCHLIST = [
-    # memory / storage
     {"ticker": "WDC", "name": "Western Digital", "currency": "USD", "theme": "メモリ・ストレージ"},
     {"ticker": "SNDK", "name": "SanDisk", "currency": "USD", "theme": "メモリ・ストレージ"},
     {"ticker": "285A.T", "name": "Kioxia", "currency": "JPY", "theme": "メモリ・ストレージ"},
     {"ticker": "MU", "name": "Micron", "currency": "USD", "theme": "メモリ・ストレージ"},
     {"ticker": "STX", "name": "Seagate", "currency": "USD", "theme": "ストレージ"},
 
-    # AI compute / cloud / server
     {"ticker": "NVDA", "name": "NVIDIA", "currency": "USD", "theme": "AI半導体"},
     {"ticker": "AMD", "name": "AMD", "currency": "USD", "theme": "AI半導体"},
     {"ticker": "AVGO", "name": "Broadcom", "currency": "USD", "theme": "AI・ネットワーク"},
@@ -39,26 +37,21 @@ WATCHLIST = [
     {"ticker": "GOOGL", "name": "Alphabet", "currency": "USD", "theme": "AIクラウド"},
     {"ticker": "AMZN", "name": "Amazon", "currency": "USD", "theme": "AIクラウド"},
 
-    # foundry
     {"ticker": "TSM", "name": "TSMC ADR", "currency": "USD", "theme": "ファウンドリ"},
 
-    # semiconductor equipment
     {"ticker": "8035.T", "name": "Tokyo Electron", "currency": "JPY", "theme": "半導体製造装置"},
     {"ticker": "6857.T", "name": "Advantest", "currency": "JPY", "theme": "半導体製造装置"},
     {"ticker": "6146.T", "name": "Disco", "currency": "JPY", "theme": "半導体製造装置"},
     {"ticker": "ASML", "name": "ASML", "currency": "USD", "theme": "半導体製造装置"},
     {"ticker": "AMAT", "name": "Applied Materials", "currency": "USD", "theme": "半導体製造装置"},
 
-    # data center infrastructure
-    {"ticker": "VRT", "name": "Vertiv", "currency": "USD", "theme": "データセンター電源・冷却"},
-    {"ticker": "ETN", "name": "Eaton", "currency": "USD", "theme": "データセンター電源・冷却"},
+    {"ticker": "VRT", "name": "Vertiv", "currency": "USD", "theme": "データセンター電力・冷却"},
+    {"ticker": "ETN", "name": "Eaton", "currency": "USD", "theme": "データセンター電力・冷却"},
     {"ticker": "ANET", "name": "Arista Networks", "currency": "USD", "theme": "データセンターネットワーク"},
 
-    # cybersecurity
     {"ticker": "CRWD", "name": "CrowdStrike", "currency": "USD", "theme": "サイバーセキュリティ"},
     {"ticker": "PANW", "name": "Palo Alto Networks", "currency": "USD", "theme": "サイバーセキュリティ"},
 
-    # defense / space
     {"ticker": "7011.T", "name": "Mitsubishi Heavy Industries", "currency": "JPY", "theme": "防衛・宇宙"},
     {"ticker": "7012.T", "name": "Kawasaki Heavy Industries", "currency": "JPY", "theme": "防衛・宇宙"},
     {"ticker": "7013.T", "name": "IHI", "currency": "JPY", "theme": "防衛・宇宙"},
@@ -73,12 +66,14 @@ def is_active_window(current: datetime) -> bool:
     return current.hour >= 9 or current.hour <= 6
 
 
-def is_hourly_trade_time(current: datetime) -> bool:
-    return is_active_window(current) and current.minute < 15
+def get_trade_slot(current: datetime):
+    if not is_active_window(current):
+        return None
+    return current.strftime("%Y-%m-%d-%H")
 
 
 def is_daily_report_time(current: datetime) -> bool:
-    return current.hour == 21 and current.minute < 15
+    return current.hour == 21
 
 
 def safe_float(value):
@@ -240,6 +235,7 @@ def default_state():
         "latest": None,
         "last_alerts": {},
         "last_daily_report_date": None,
+        "last_trade_slot": None,
     }
 
 
@@ -259,6 +255,7 @@ def load_state():
     state.setdefault("latest", None)
     state.setdefault("last_alerts", {})
     state.setdefault("last_daily_report_date", None)
+    state.setdefault("last_trade_slot", None)
     return state
 
 
@@ -297,6 +294,29 @@ def refresh_positions(positions, market_map):
         refreshed.append(new_pos)
 
     return refreshed
+
+
+def build_portfolio_snapshot(state, market_data):
+    market_map = {row["ticker"]: row for row in market_data}
+    cash = int(state.get("cash", STARTING_CAPITAL))
+    positions = refresh_positions(state.get("positions", []), market_map)
+
+    total_position_value = sum(int(pos.get("market_value_jpy", 0)) for pos in positions)
+    total_value = cash + total_position_value
+    pnl_jpy = total_value - STARTING_CAPITAL
+    pnl_pct = pnl_jpy / STARTING_CAPITAL * 100.0
+
+    state["positions"] = positions
+
+    return {
+        "starting_capital": STARTING_CAPITAL,
+        "cash": cash,
+        "position_value": total_position_value,
+        "total_value": total_value,
+        "pnl_jpy": pnl_jpy,
+        "pnl_pct": pnl_pct,
+        "positions": positions,
+    }
 
 
 def update_paper_portfolio(state, market_data, current):
@@ -394,24 +414,10 @@ def update_paper_portfolio(state, market_data, current):
             }
         )
 
-    positions = refresh_positions(positions, market_map)
-    total_position_value = sum(int(pos.get("market_value_jpy", 0)) for pos in positions)
-    total_value = cash + total_position_value
-    pnl_jpy = total_value - STARTING_CAPITAL
-    pnl_pct = pnl_jpy / STARTING_CAPITAL * 100.0
-
     state["cash"] = cash
     state["positions"] = positions
 
-    portfolio = {
-        "starting_capital": STARTING_CAPITAL,
-        "cash": cash,
-        "position_value": total_position_value,
-        "total_value": total_value,
-        "pnl_jpy": pnl_jpy,
-        "pnl_pct": pnl_pct,
-        "positions": positions,
-    }
+    portfolio = build_portfolio_snapshot(state, market_data)
 
     if not decisions:
         decisions.append(
@@ -537,8 +543,7 @@ def make_discord_message(report):
     lines.append("")
     lines.append("※実売買なし。GitHub Actions上のペーパートレード記録のみ。")
 
-    message = "\n".join(lines)
-    return message[:1900]
+    return "\n".join(lines)[:1900]
 
 
 def make_alert_message(alerts, current):
@@ -593,26 +598,50 @@ def main():
         write_state(state)
         print(f"Sent {len(alerts)} alert(s).")
 
-    if not is_hourly_trade_time(current):
-        print(f"Monitor only: {current.isoformat()}")
-        return
-
-    portfolio, decisions = update_paper_portfolio(state, market_data, current)
-    report = build_report(state, market_data, usd_jpy, portfolio, decisions, current)
-
+    trade_slot = get_trade_slot(current)
+    last_trade_slot = state.get("last_trade_slot")
     today = current.strftime("%Y-%m-%d")
+
+    should_trade = trade_slot != last_trade_slot
     should_send_daily_report = (
         is_daily_report_time(current)
         and state.get("last_daily_report_date") != today
     )
 
-    if should_send_daily_report:
+    report = None
+
+    if should_trade:
+        portfolio, decisions = update_paper_portfolio(state, market_data, current)
+        report = build_report(state, market_data, usd_jpy, portfolio, decisions, current)
+        state["last_trade_slot"] = trade_slot
+        print(f"Paper trade executed for slot: {trade_slot}")
+    else:
+        print(f"Monitor only. Already traded in this hour: {trade_slot}")
+
+        if should_send_daily_report:
+            portfolio = build_portfolio_snapshot(state, market_data)
+            decisions = [
+                {
+                    "action": "report_only",
+                    "ticker": "-",
+                    "qty": 0,
+                    "amount_jpy": 0,
+                    "reason": "この時間帯のペーパートレードは実行済み。21時通常レポートのみ送信。",
+                }
+            ]
+            report = build_report(state, market_data, usd_jpy, portfolio, decisions, current)
+
+    if should_send_daily_report and report is not None:
         send_discord_report(report)
         state["last_daily_report_date"] = today
         print("Sent daily Discord report.")
 
-    save_state(state, report)
-    print("Paper trade report updated.")
+    if report is not None:
+        save_state(state, report)
+        print("Report data updated.")
+    else:
+        write_state(state)
+        print("Monitoring completed.")
 
 
 if __name__ == "__main__":
