@@ -2,14 +2,16 @@ name: Daily Discord Market Report
 
 on:
   schedule:
-    # JST 09:00-翌05:45 = UTC 00:00-20:45
     - cron: "*/15 0-20 * * *"
-    # JST 翌06:00 = UTC 21:00
     - cron: "0 21 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: daily-discord-market-report
+  cancel-in-progress: false
 
 jobs:
   report:
