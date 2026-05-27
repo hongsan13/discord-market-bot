@@ -7,10 +7,10 @@
       "name": "Seagate",
       "qty": 1,
       "buy_price_jpy": 128970.12728347909,
-      "current_price_jpy": 136875.3102493286,
-      "market_value_jpy": 136875,
-      "pnl_jpy": 7905,
-      "pnl_pct": 6.129332402884391,
+      "current_price_jpy": 141955.90754699707,
+      "market_value_jpy": 141955,
+      "pnl_jpy": 12985,
+      "pnl_pct": 10.06823292238505,
       "bought_at": "2026-05-22T16:20:58.324955+09:00"
     },
     {
@@ -18,10 +18,10 @@
       "name": "Western Digital",
       "qty": 2,
       "buy_price_jpy": 77411.35320108151,
-      "current_price_jpy": 84790.96730117798,
-      "market_value_jpy": 169581,
-      "pnl_jpy": 14759,
-      "pnl_pct": 9.532882923615507,
+      "current_price_jpy": 88148.08638442993,
+      "market_value_jpy": 176296,
+      "pnl_jpy": 21474,
+      "pnl_pct": 13.870121817312786,
       "bought_at": "2026-05-22T16:20:58.324973+09:00"
     },
     {
@@ -29,10 +29,10 @@
       "name": "Arista Networks",
       "qty": 8,
       "buy_price_jpy": 23645.423859532457,
-      "current_price_jpy": 25266.34547973633,
-      "market_value_jpy": 202130,
-      "pnl_jpy": 12967,
-      "pnl_pct": 6.85493463309421,
+      "current_price_jpy": 25332.198989868164,
+      "market_value_jpy": 202657,
+      "pnl_jpy": 13494,
+      "pnl_pct": 7.1335303415572815,
       "bought_at": "2026-05-22T16:20:58.324980+09:00"
     },
     {
@@ -40,10 +40,10 @@
       "name": "Micron",
       "qty": 1,
       "buy_price_jpy": 121274.49619886465,
-      "current_price_jpy": 148972.93592376707,
-      "market_value_jpy": 148972,
-      "pnl_jpy": 27698,
-      "pnl_pct": 22.839190593202172,
+      "current_price_jpy": 153054.27850067138,
+      "market_value_jpy": 153054,
+      "pnl_jpy": 31780,
+      "pnl_pct": 26.205122285073468,
       "bought_at": "2026-05-22T16:20:58.324985+09:00"
     },
     {
@@ -51,10 +51,10 @@
       "name": "Dell",
       "qty": 3,
       "buy_price_jpy": 40228.57104227296,
-      "current_price_jpy": 49796.313744506835,
-      "market_value_jpy": 149388,
-      "pnl_jpy": 28703,
-      "pnl_pct": 23.783403074118574,
+      "current_price_jpy": 49216.145010945125,
+      "market_value_jpy": 147648,
+      "pnl_jpy": 26963,
+      "pnl_pct": 22.341633177279697,
       "bought_at": "2026-05-22T16:20:58.324989+09:00"
     }
   ],
@@ -3247,27 +3247,410 @@
           "reason": "新規売買条件を満たす銘柄なし。ペーパートレードは保有継続。"
         }
       ]
+    },
+    {
+      "date": "2026-05-27",
+      "time": "21:33:42",
+      "generated_at": "2026-05-27T21:33:42.900488+09:00",
+      "title": "Daily Discord Market Report",
+      "universe": "AI/半導体インフラ",
+      "paper_trade": true,
+      "real_trade": false,
+      "usd_jpy": 159.32200622558594,
+      "market_data": [
+        {
+          "ticker": "MU",
+          "name": "Micron",
+          "theme": "メモリ・ストレージ",
+          "currency": "USD",
+          "last": 960.66,
+          "last_jpy": 153054.27850067138,
+          "pct_change": 19.291611835261314,
+          "change_15m": -0.7286368834665602,
+          "error": null
+        },
+        {
+          "ticker": "WDC",
+          "name": "Western Digital",
+          "theme": "メモリ・ストレージ",
+          "currency": "USD",
+          "last": 553.27,
+          "last_jpy": 88148.08638442993,
+          "pct_change": 8.336091875882667,
+          "change_15m": -0.502746438549706,
+          "error": null
+        },
+        {
+          "ticker": "AMD",
+          "name": "AMD",
+          "theme": "AI半導体",
+          "currency": "USD",
+          "last": 511.22,
+          "last_jpy": 81448.59602264405,
+          "pct_change": 7.78165261125654,
+          "change_15m": -0.45855035778611386,
+          "error": null
+        },
+        {
+          "ticker": "SNDK",
+          "name": "SanDisk",
+          "theme": "メモリ・ストレージ",
+          "currency": "USD",
+          "last": 1639.0,
+          "last_jpy": 261128.76820373535,
+          "pct_change": 7.497184116667888,
+          "change_15m": -0.590754151655204,
+          "error": null
+        },
+        {
+          "ticker": "AMAT",
+          "name": "Applied Materials",
+          "theme": "半導体製造装置",
+          "currency": "USD",
+          "last": 472.72,
+          "last_jpy": 75314.69878295899,
+          "pct_change": 5.25962856204063,
+          "change_15m": 0.14617714975744267,
+          "error": null
+        },
+        {
+          "ticker": "SMCI",
+          "name": "Super Micro Computer",
+          "theme": "AIサーバー",
+          "currency": "USD",
+          "last": 38.6,
+          "last_jpy": 6149.829440307617,
+          "pct_change": 4.272053301975198,
+          "change_15m": -0.05825619781215652,
+          "error": null
+        },
+        {
+          "ticker": "STX",
+          "name": "Seagate",
+          "theme": "ストレージ",
+          "currency": "USD",
+          "last": 891.0,
+          "last_jpy": 141955.90754699707,
+          "pct_change": 4.064084024293613,
+          "change_15m": -0.2239641657334812,
+          "error": null
+        },
+        {
+          "ticker": "6857.T",
+          "name": "Advantest",
+          "theme": "半導体製造装置",
+          "currency": "JPY",
+          "last": 27200.0,
+          "last_jpy": 27200.0,
+          "pct_change": 4.046021093000962,
+          "change_15m": -0.11017260374587279,
+          "error": null
+        },
+        {
+          "ticker": "DELL",
+          "name": "Dell",
+          "theme": "AIサーバー",
+          "currency": "USD",
+          "last": 308.9099,
+          "last_jpy": 49216.145010945125,
+          "pct_change": 3.3503790945028644,
+          "change_15m": -0.41589297227594413,
+          "error": null
+        },
+        {
+          "ticker": "ETN",
+          "name": "Eaton",
+          "theme": "データセンター電力・冷却",
+          "currency": "USD",
+          "last": 409.5,
+          "last_jpy": 65242.36154937744,
+          "pct_change": 3.0100929080300043,
+          "change_15m": -0.025488007453045025,
+          "error": null
+        },
+        {
+          "ticker": "ANET",
+          "name": "Arista Networks",
+          "theme": "データセンターネットワーク",
+          "currency": "USD",
+          "last": 159.0,
+          "last_jpy": 25332.198989868164,
+          "pct_change": 2.583909471584067,
+          "change_15m": -0.4383218534752542,
+          "error": null
+        },
+        {
+          "ticker": "8035.T",
+          "name": "Tokyo Electron",
+          "theme": "半導体製造装置",
+          "currency": "JPY",
+          "last": 52680.0,
+          "last_jpy": 52680.0,
+          "pct_change": 2.100350058343059,
+          "change_15m": -0.32166508987701015,
+          "error": null
+        },
+        {
+          "ticker": "TSM",
+          "name": "TSMC ADR",
+          "theme": "ファウンドリ",
+          "currency": "USD",
+          "last": 430.14,
+          "last_jpy": 68530.76775787353,
+          "pct_change": 1.9282157921455045,
+          "change_15m": -0.4121133543248834,
+          "error": null
+        },
+        {
+          "ticker": "AVGO",
+          "name": "Broadcom",
+          "theme": "AI・ネットワーク",
+          "currency": "USD",
+          "last": 432.9005,
+          "last_jpy": 68970.57615605927,
+          "pct_change": 1.9003223158400528,
+          "change_15m": 0.2413523698288067,
+          "error": null
+        },
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet",
+          "theme": "AIクラウド",
+          "currency": "USD",
+          "last": 386.85,
+          "last_jpy": 61633.718108367924,
+          "pct_change": 1.5432027686950622,
+          "change_15m": -0.09297280545439435,
+          "error": null
+        },
+        {
+          "ticker": "CRWD",
+          "name": "CrowdStrike",
+          "theme": "サイバーセキュリティ",
+          "currency": "USD",
+          "last": 647.3,
+          "last_jpy": 103129.13462982177,
+          "pct_change": 1.2193599542378974,
+          "change_15m": 0.4219802041639298,
+          "error": null
+        },
+        {
+          "ticker": "6146.T",
+          "name": "Disco",
+          "theme": "半導体製造装置",
+          "currency": "JPY",
+          "last": 67420.0,
+          "last_jpy": 67420.0,
+          "pct_change": 1.076072335973688,
+          "change_15m": -0.41358936484490183,
+          "error": null
+        },
+        {
+          "ticker": "ASML",
+          "name": "ASML",
+          "theme": "半導体製造装置",
+          "currency": "USD",
+          "last": 1660.35,
+          "last_jpy": 264530.2930366516,
+          "pct_change": -0.05327914166084469,
+          "change_15m": -0.21275444891190043,
+          "error": null
+        },
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA",
+          "theme": "AI半導体",
+          "currency": "USD",
+          "last": 215.84,
+          "last_jpy": 34388.061823730466,
+          "pct_change": -0.21827019769956602,
+          "change_15m": -0.013665663745909828,
+          "error": null
+        },
+        {
+          "ticker": "AMZN",
+          "name": "Amazon",
+          "theme": "AIクラウド",
+          "currency": "USD",
+          "last": 265.6,
+          "last_jpy": 42315.92485351563,
+          "pct_change": -0.3867523096163561,
+          "change_15m": 0.15007428299937953,
+          "error": null
+        },
+        {
+          "ticker": "MSFT",
+          "name": "Microsoft",
+          "theme": "AIクラウド",
+          "currency": "USD",
+          "last": 413.0504,
+          "last_jpy": 65808.01840028077,
+          "pct_change": -0.606830040489359,
+          "change_15m": -0.03966464858548013,
+          "error": null
+        },
+        {
+          "ticker": "VRT",
+          "name": "Vertiv",
+          "theme": "データセンター電力・冷却",
+          "currency": "USD",
+          "last": 329.24,
+          "last_jpy": 52455.177329711914,
+          "pct_change": -1.0840981755341428,
+          "change_15m": -0.3390240949267431,
+          "error": null
+        },
+        {
+          "ticker": "7011.T",
+          "name": "Mitsubishi Heavy Industries",
+          "theme": "防衛・宇宙",
+          "currency": "JPY",
+          "last": 3891.0,
+          "last_jpy": 3891.0,
+          "pct_change": -1.166328600405675,
+          "change_15m": 0.02570694087402625,
+          "error": null
+        },
+        {
+          "ticker": "PANW",
+          "name": "Palo Alto Networks",
+          "theme": "サイバーセキュリティ",
+          "currency": "USD",
+          "last": 246.5,
+          "last_jpy": 39272.87453460693,
+          "pct_change": -1.4697930653256308,
+          "change_15m": 0.20325203252031798,
+          "error": null
+        },
+        {
+          "ticker": "285A.T",
+          "name": "Kioxia",
+          "theme": "メモリ・ストレージ",
+          "currency": "JPY",
+          "last": 60970.0,
+          "last_jpy": 60970.0,
+          "pct_change": -3.0579570925392208,
+          "change_15m": -0.29435813573180925,
+          "error": null
+        },
+        {
+          "ticker": "7013.T",
+          "name": "IHI",
+          "theme": "防衛・宇宙",
+          "currency": "JPY",
+          "last": 2818.0,
+          "last_jpy": 2818.0,
+          "pct_change": -4.2961453557480045,
+          "change_15m": -0.15943312666075737,
+          "error": null
+        },
+        {
+          "ticker": "7012.T",
+          "name": "Kawasaki Heavy Industries",
+          "theme": "防衛・宇宙",
+          "currency": "JPY",
+          "last": 3162.0,
+          "last_jpy": 3162.0,
+          "pct_change": -5.472932778108264,
+          "change_15m": -0.34667507091080685,
+          "error": null
+        }
+      ],
+      "portfolio": {
+        "starting_capital": 1000000,
+        "cash": 285086,
+        "position_value": 821610,
+        "total_value": 1106696,
+        "pnl_jpy": 106696,
+        "pnl_pct": 10.669599999999999,
+        "positions": [
+          {
+            "ticker": "STX",
+            "name": "Seagate",
+            "qty": 1,
+            "buy_price_jpy": 128970.12728347909,
+            "current_price_jpy": 141955.90754699707,
+            "market_value_jpy": 141955,
+            "pnl_jpy": 12985,
+            "pnl_pct": 10.06823292238505,
+            "bought_at": "2026-05-22T16:20:58.324955+09:00"
+          },
+          {
+            "ticker": "WDC",
+            "name": "Western Digital",
+            "qty": 2,
+            "buy_price_jpy": 77411.35320108151,
+            "current_price_jpy": 88148.08638442993,
+            "market_value_jpy": 176296,
+            "pnl_jpy": 21474,
+            "pnl_pct": 13.870121817312786,
+            "bought_at": "2026-05-22T16:20:58.324973+09:00"
+          },
+          {
+            "ticker": "ANET",
+            "name": "Arista Networks",
+            "qty": 8,
+            "buy_price_jpy": 23645.423859532457,
+            "current_price_jpy": 25332.198989868164,
+            "market_value_jpy": 202657,
+            "pnl_jpy": 13494,
+            "pnl_pct": 7.1335303415572815,
+            "bought_at": "2026-05-22T16:20:58.324980+09:00"
+          },
+          {
+            "ticker": "MU",
+            "name": "Micron",
+            "qty": 1,
+            "buy_price_jpy": 121274.49619886465,
+            "current_price_jpy": 153054.27850067138,
+            "market_value_jpy": 153054,
+            "pnl_jpy": 31780,
+            "pnl_pct": 26.205122285073468,
+            "bought_at": "2026-05-22T16:20:58.324985+09:00"
+          },
+          {
+            "ticker": "DELL",
+            "name": "Dell",
+            "qty": 3,
+            "buy_price_jpy": 40228.57104227296,
+            "current_price_jpy": 49216.145010945125,
+            "market_value_jpy": 147648,
+            "pnl_jpy": 26963,
+            "pnl_pct": 22.341633177279697,
+            "bought_at": "2026-05-22T16:20:58.324989+09:00"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "action": "hold",
+          "ticker": "-",
+          "qty": 0,
+          "amount_jpy": 0,
+          "reason": "新規売買条件を満たす銘柄なし。ペーパートレードは保有継続。"
+        }
+      ]
     }
   ],
   "latest": {
     "date": "2026-05-27",
-    "time": "17:54:40",
-    "generated_at": "2026-05-27T17:54:40.992779+09:00",
+    "time": "21:33:42",
+    "generated_at": "2026-05-27T21:33:42.900488+09:00",
     "title": "Daily Discord Market Report",
     "universe": "AI/半導体インフラ",
     "paper_trade": true,
     "real_trade": false,
-    "usd_jpy": 159.38900756835938,
+    "usd_jpy": 159.32200622558594,
     "market_data": [
       {
         "ticker": "MU",
         "name": "Micron",
         "theme": "メモリ・ストレージ",
         "currency": "USD",
-        "last": 934.65,
-        "last_jpy": 148972.93592376707,
+        "last": 960.66,
+        "last_jpy": 153054.27850067138,
         "pct_change": 19.291611835261314,
-        "change_15m": -0.25595262742031943,
+        "change_15m": -0.7286368834665602,
         "error": null
       },
       {
@@ -3275,10 +3658,10 @@
         "name": "Western Digital",
         "theme": "メモリ・ストレージ",
         "currency": "USD",
-        "last": 531.975,
-        "last_jpy": 84790.96730117798,
+        "last": 553.27,
+        "last_jpy": 88148.08638442993,
         "pct_change": 8.336091875882667,
-        "change_15m": -0.33783688846098503,
+        "change_15m": -0.502746438549706,
         "error": null
       },
       {
@@ -3286,10 +3669,10 @@
         "name": "AMD",
         "theme": "AI半導体",
         "currency": "USD",
-        "last": 510.44,
-        "last_jpy": 81358.52502319336,
+        "last": 511.22,
+        "last_jpy": 81448.59602264405,
         "pct_change": 7.78165261125654,
-        "change_15m": -0.2849782027228853,
+        "change_15m": -0.45855035778611386,
         "error": null
       },
       {
@@ -3297,10 +3680,10 @@
         "name": "SanDisk",
         "theme": "メモリ・ストレージ",
         "currency": "USD",
-        "last": 1605.075,
-        "last_jpy": 255831.31132278443,
+        "last": 1639.0,
+        "last_jpy": 261128.76820373535,
         "pct_change": 7.497184116667888,
-        "change_15m": -0.5227733326722439,
+        "change_15m": -0.590754151655204,
         "error": null
       },
       {
@@ -3308,10 +3691,10 @@
         "name": "Applied Materials",
         "theme": "半導体製造装置",
         "currency": "USD",
-        "last": 461.7527,
-        "last_jpy": 73598.30459501037,
+        "last": 472.72,
+        "last_jpy": 75314.69878295899,
         "pct_change": 5.25962856204063,
-        "change_15m": 0.23720314331610037,
+        "change_15m": 0.14617714975744267,
         "error": null
       },
       {
@@ -3319,10 +3702,10 @@
         "name": "Super Micro Computer",
         "theme": "AIサーバー",
         "currency": "USD",
-        "last": 37.81,
-        "last_jpy": 6026.498376159669,
+        "last": 38.6,
+        "last_jpy": 6149.829440307617,
         "pct_change": 4.272053301975198,
-        "change_15m": 0.026455026455041164,
+        "change_15m": -0.05825619781215652,
         "error": null
       },
       {
@@ -3330,10 +3713,10 @@
         "name": "Seagate",
         "theme": "ストレージ",
         "currency": "USD",
-        "last": 858.75,
-        "last_jpy": 136875.3102493286,
+        "last": 891.0,
+        "last_jpy": 141955.90754699707,
         "pct_change": 4.064084024293613,
-        "change_15m": -0.029103608847491635,
+        "change_15m": -0.2239641657334812,
         "error": null
       },
       {
@@ -3352,10 +3735,10 @@
         "name": "Dell",
         "theme": "AIサーバー",
         "currency": "USD",
-        "last": 312.42,
-        "last_jpy": 49796.313744506835,
+        "last": 308.9099,
+        "last_jpy": 49216.145010945125,
         "pct_change": 3.3503790945028644,
-        "change_15m": -0.07359665005703953,
+        "change_15m": -0.41589297227594413,
         "error": null
       },
       {
@@ -3363,10 +3746,10 @@
         "name": "Eaton",
         "theme": "データセンター電力・冷却",
         "currency": "USD",
-        "last": 406.4108,
-        "last_jpy": 64777.41407706299,
+        "last": 409.5,
+        "last_jpy": 65242.36154937744,
         "pct_change": 3.0100929080300043,
-        "change_15m": -0.6330562347188318,
+        "change_15m": -0.025488007453045025,
         "error": null
       },
       {
@@ -3374,10 +3757,10 @@
         "name": "Arista Networks",
         "theme": "データセンターネットワーク",
         "currency": "USD",
-        "last": 158.52,
-        "last_jpy": 25266.34547973633,
+        "last": 159.0,
+        "last_jpy": 25332.198989868164,
         "pct_change": 2.583909471584067,
-        "change_15m": -0.04413897471466921,
+        "change_15m": -0.4383218534752542,
         "error": null
       },
       {
@@ -3396,10 +3779,10 @@
         "name": "TSMC ADR",
         "theme": "ファウンドリ",
         "currency": "USD",
-        "last": 419.4,
-        "last_jpy": 66847.74977416992,
+        "last": 430.14,
+        "last_jpy": 68530.76775787353,
         "pct_change": 1.9282157921455045,
-        "change_15m": 0.10741138560688146,
+        "change_15m": -0.4121133543248834,
         "error": null
       },
       {
@@ -3407,10 +3790,10 @@
         "name": "Broadcom",
         "theme": "AI・ネットワーク",
         "currency": "USD",
-        "last": 423.5545,
-        "last_jpy": 67509.93140611268,
+        "last": 432.9005,
+        "last_jpy": 68970.57615605927,
         "pct_change": 1.9003223158400528,
-        "change_15m": 0.08376654064272682,
+        "change_15m": 0.2413523698288067,
         "error": null
       },
       {
@@ -3418,10 +3801,10 @@
         "name": "Alphabet",
         "theme": "AIクラウド",
         "currency": "USD",
-        "last": 388.45,
-        "last_jpy": 61914.6599899292,
+        "last": 386.85,
+        "last_jpy": 61633.718108367924,
         "pct_change": 1.5432027686950622,
-        "change_15m": 0.011276853973996026,
+        "change_15m": -0.09297280545439435,
         "error": null
       },
       {
@@ -3429,10 +3812,10 @@
         "name": "CrowdStrike",
         "theme": "サイバーセキュリティ",
         "currency": "USD",
-        "last": 652.66,
-        "last_jpy": 104026.82967956543,
+        "last": 647.3,
+        "last_jpy": 103129.13462982177,
         "pct_change": 1.2193599542378974,
-        "change_15m": 0.0,
+        "change_15m": 0.4219802041639298,
         "error": null
       },
       {
@@ -3451,10 +3834,10 @@
         "name": "ASML",
         "theme": "半導体製造装置",
         "currency": "USD",
-        "last": 1643.5092,
-        "last_jpy": 261957.30031746827,
+        "last": 1660.35,
+        "last_jpy": 264530.2930366516,
         "pct_change": -0.05327914166084469,
-        "change_15m": 0.053523922003129165,
+        "change_15m": -0.21275444891190043,
         "error": null
       },
       {
@@ -3462,10 +3845,10 @@
         "name": "NVIDIA",
         "theme": "AI半導体",
         "currency": "USD",
-        "last": 214.9015,
-        "last_jpy": 34252.93680995178,
+        "last": 215.84,
+        "last_jpy": 34388.061823730466,
         "pct_change": -0.21827019769956602,
-        "change_15m": 0.05191116904883497,
+        "change_15m": -0.013665663745909828,
         "error": null
       },
       {
@@ -3473,10 +3856,10 @@
         "name": "Amazon",
         "theme": "AIクラウド",
         "currency": "USD",
-        "last": 265.5796,
-        "last_jpy": 42330.46887440186,
+        "last": 265.6,
+        "last_jpy": 42315.92485351563,
         "pct_change": -0.3867523096163561,
-        "change_15m": 0.026213701932142897,
+        "change_15m": 0.15007428299937953,
         "error": null
       },
       {
@@ -3484,10 +3867,10 @@
         "name": "Microsoft",
         "theme": "AIクラウド",
         "currency": "USD",
-        "last": 414.61,
-        "last_jpy": 66084.27642791749,
+        "last": 413.0504,
+        "last_jpy": 65808.01840028077,
         "pct_change": -0.606830040489359,
-        "change_15m": -0.04098558271854458,
+        "change_15m": -0.03966464858548013,
         "error": null
       },
       {
@@ -3495,10 +3878,10 @@
         "name": "Vertiv",
         "theme": "データセンター電力・冷却",
         "currency": "USD",
-        "last": 328.69,
-        "last_jpy": 52389.572897644044,
+        "last": 329.24,
+        "last_jpy": 52455.177329711914,
         "pct_change": -1.0840981755341428,
-        "change_15m": 0.10659682036913143,
+        "change_15m": -0.3390240949267431,
         "error": null
       },
       {
@@ -3517,10 +3900,10 @@
         "name": "Palo Alto Networks",
         "theme": "サイバーセキュリティ",
         "currency": "USD",
-        "last": 251.62,
-        "last_jpy": 40105.46208435058,
+        "last": 246.5,
+        "last_jpy": 39272.87453460693,
         "pct_change": -1.4697930653256308,
-        "change_15m": -0.023839796567071136,
+        "change_15m": 0.20325203252031798,
         "error": null
       },
       {
@@ -3560,20 +3943,20 @@
     "portfolio": {
       "starting_capital": 1000000,
       "cash": 285086,
-      "position_value": 806946,
-      "total_value": 1092032,
-      "pnl_jpy": 92032,
-      "pnl_pct": 9.2032,
+      "position_value": 821610,
+      "total_value": 1106696,
+      "pnl_jpy": 106696,
+      "pnl_pct": 10.669599999999999,
       "positions": [
         {
           "ticker": "STX",
           "name": "Seagate",
           "qty": 1,
           "buy_price_jpy": 128970.12728347909,
-          "current_price_jpy": 136875.3102493286,
-          "market_value_jpy": 136875,
-          "pnl_jpy": 7905,
-          "pnl_pct": 6.129332402884391,
+          "current_price_jpy": 141955.90754699707,
+          "market_value_jpy": 141955,
+          "pnl_jpy": 12985,
+          "pnl_pct": 10.06823292238505,
           "bought_at": "2026-05-22T16:20:58.324955+09:00"
         },
         {
@@ -3581,10 +3964,10 @@
           "name": "Western Digital",
           "qty": 2,
           "buy_price_jpy": 77411.35320108151,
-          "current_price_jpy": 84790.96730117798,
-          "market_value_jpy": 169581,
-          "pnl_jpy": 14759,
-          "pnl_pct": 9.532882923615507,
+          "current_price_jpy": 88148.08638442993,
+          "market_value_jpy": 176296,
+          "pnl_jpy": 21474,
+          "pnl_pct": 13.870121817312786,
           "bought_at": "2026-05-22T16:20:58.324973+09:00"
         },
         {
@@ -3592,10 +3975,10 @@
           "name": "Arista Networks",
           "qty": 8,
           "buy_price_jpy": 23645.423859532457,
-          "current_price_jpy": 25266.34547973633,
-          "market_value_jpy": 202130,
-          "pnl_jpy": 12967,
-          "pnl_pct": 6.85493463309421,
+          "current_price_jpy": 25332.198989868164,
+          "market_value_jpy": 202657,
+          "pnl_jpy": 13494,
+          "pnl_pct": 7.1335303415572815,
           "bought_at": "2026-05-22T16:20:58.324980+09:00"
         },
         {
@@ -3603,10 +3986,10 @@
           "name": "Micron",
           "qty": 1,
           "buy_price_jpy": 121274.49619886465,
-          "current_price_jpy": 148972.93592376707,
-          "market_value_jpy": 148972,
-          "pnl_jpy": 27698,
-          "pnl_pct": 22.839190593202172,
+          "current_price_jpy": 153054.27850067138,
+          "market_value_jpy": 153054,
+          "pnl_jpy": 31780,
+          "pnl_pct": 26.205122285073468,
           "bought_at": "2026-05-22T16:20:58.324985+09:00"
         },
         {
@@ -3614,10 +3997,10 @@
           "name": "Dell",
           "qty": 3,
           "buy_price_jpy": 40228.57104227296,
-          "current_price_jpy": 49796.313744506835,
-          "market_value_jpy": 149388,
-          "pnl_jpy": 28703,
-          "pnl_pct": 23.783403074118574,
+          "current_price_jpy": 49216.145010945125,
+          "market_value_jpy": 147648,
+          "pnl_jpy": 26963,
+          "pnl_pct": 22.341633177279697,
           "bought_at": "2026-05-22T16:20:58.324989+09:00"
         }
       ]
@@ -3635,6 +4018,6 @@
   "last_alerts": {
     "6857.T": "2026-05-27T04:34:48.997692+09:00"
   },
-  "last_daily_report_date": "2026-05-26",
-  "last_trade_slot": "2026-05-27-17"
+  "last_daily_report_date": "2026-05-27",
+  "last_trade_slot": "2026-05-27-21"
 }
