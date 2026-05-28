@@ -11,7 +11,11 @@
       "market_value_jpy": 138104,
       "pnl_jpy": 9134,
       "pnl_pct": 7.0822671939210675,
-      "bought_at": "2026-05-22T16:20:58.324955+09:00"
+      "bought_at": "2026-05-22T16:20:58.324955+09:00",
+      "peak_price_jpy": 141955.90754699707,
+      "peak_pnl_pct": 10.06823292238505,
+      "partial_taken_20": false,
+      "strategy_version": "v2_profit_protection"
     },
     {
       "ticker": "WDC",
@@ -22,7 +26,11 @@
       "market_value_jpy": 168567,
       "pnl_jpy": 13745,
       "pnl_pct": 8.877937244060922,
-      "bought_at": "2026-05-22T16:20:58.324973+09:00"
+      "bought_at": "2026-05-22T16:20:58.324973+09:00",
+      "peak_price_jpy": 88148.08638442993,
+      "peak_pnl_pct": 13.870121817312786,
+      "partial_taken_20": false,
+      "strategy_version": "v2_profit_protection"
     },
     {
       "ticker": "ANET",
@@ -33,7 +41,11 @@
       "market_value_jpy": 196576,
       "pnl_jpy": 7413,
       "pnl_pct": 3.918842479766128,
-      "bought_at": "2026-05-22T16:20:58.324980+09:00"
+      "bought_at": "2026-05-22T16:20:58.324980+09:00",
+      "peak_price_jpy": 25347.664831695558,
+      "peak_pnl_pct": 7.199082272960357,
+      "partial_taken_20": false,
+      "strategy_version": "v2_profit_protection"
     },
     {
       "ticker": "MU",
@@ -44,7 +56,11 @@
       "market_value_jpy": 144381,
       "pnl_jpy": 23107,
       "pnl_pct": 19.05354816366245,
-      "bought_at": "2026-05-22T16:20:58.324985+09:00"
+      "bought_at": "2026-05-22T16:20:58.324985+09:00",
+      "peak_price_jpy": 153054.27850067138,
+      "peak_pnl_pct": 26.205122285073468,
+      "partial_taken_20": false,
+      "strategy_version": "v2_profit_protection"
     },
     {
       "ticker": "DELL",
@@ -55,7 +71,11 @@
       "market_value_jpy": 151979,
       "pnl_jpy": 31294,
       "pnl_pct": 25.93031445498612,
-      "bought_at": "2026-05-22T16:20:58.324989+09:00"
+      "bought_at": "2026-05-22T16:20:58.324989+09:00",
+      "peak_price_jpy": 50664.74662780762,
+      "peak_pnl_pct": 25.942743505820935,
+      "partial_taken_20": false,
+      "strategy_version": "v2_profit_protection"
     }
   ],
   "reports": [
@@ -5168,5 +5188,8 @@
     "6857.T": "2026-05-27T04:34:48.997692+09:00"
   },
   "last_daily_report_date": "2026-05-27",
-  "last_trade_slot": "2026-05-28-12"
+  "last_trade_slot": "2026-05-28-12",
+  "realized_pnl_jpy": 0,
+  "realized_trades": [],
+  "strategy_version": "v2_profit_protection"
 }
