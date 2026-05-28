@@ -1,6 +1,8 @@
+
 import json
 import math
 import os
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -12,14 +14,33 @@ JST = timezone(timedelta(hours=9))
 
 STARTING_CAPITAL = 1_000_000
 MAX_POSITIONS = 5
-MAX_REPORTS = 120
+MAX_REPORTS = 240
 
 DATA_PATH = Path("data/reports.json")
 DOCS_DATA_PATH = Path("docs/data/reports.json")
 
+STRATEGY_VERSION = "v2_profit_protection"
+
 ALERT_15M_DROP_PCT = -3.0
 ALERT_DAY_DROP_PCT = -6.0
 ALERT_COOLDOWN_MINUTES = 180
+
+STOP_LOSS_PCT = -8.0
+BREAK_EVEN_START_PCT = 10.0
+BREAK_EVEN_BUFFER_PCT = 1.0
+TRAILING_START_PCT = 15.0
+TRAILING_DRAWDOWN_PCT = -7.0
+PARTIAL_TAKE_PROFIT_PCT = 20.0
+
+BUY_DAILY_MIN_PCT = 1.5
+BUY_DAILY_MAX_PCT = 12.0
+BUY_15M_MIN_PCT = -1.0
+BUY_15M_MAX_PCT = 4.0
+
+MIN_CASH_RATIO = 0.20
+BUY_ALLOCATION_RATIO = 0.12
+MAX_POSITION_WEIGHT = 0.25
+MAX_THEME_POSITIONS = 2
 
 WATCHLIST = [
     {"ticker": "WDC", "name": "Western Digital", "currency": "USD", "theme": "メモリ・ストレージ"},
@@ -124,7 +145,6 @@ def fetch_last_and_change(ticker: str):
         return None, None
 
     last = closes[-1]
-
     if len(closes) < 2:
         return last, None
 
@@ -157,7 +177,6 @@ def fetch_intraday_change(ticker: str):
         return None, None
 
     last = closes[-1]
-
     if len(closes) < 2:
         return last, None
 
@@ -236,7 +255,94 @@ def default_state():
         "last_alerts": {},
         "last_daily_report_date": None,
         "last_trade_slot": None,
+        "realized_pnl_jpy": 0,
+        "realized_trades": [],
+        "strategy_version": STRATEGY_VERSION,
     }
+
+
+def infer_peaks_from_reports(state):
+    peaks = {}
+
+    for report in state.get("reports", []):
+        portfolio = report.get("portfolio", {})
+        for pos in portfolio.get("positions", []):
+            ticker = pos.get("ticker")
+            if not ticker:
+                continue
+
+            current_price = safe_float(pos.get("current_price_jpy"))
+            pnl_pct = safe_float(pos.get("pnl_pct"))
+
+            item = peaks.setdefault(
+                ticker,
+                {
+                    "peak_price_jpy": None,
+                    "peak_pnl_pct": None,
+                },
+            )
+
+            if current_price is not None:
+                old_price = safe_float(item.get("peak_price_jpy"))
+                if old_price is None or current_price > old_price:
+                    item["peak_price_jpy"] = current_price
+
+            if pnl_pct is not None:
+                old_pnl = safe_float(item.get("peak_pnl_pct"))
+                if old_pnl is None or pnl_pct > old_pnl:
+                    item["peak_pnl_pct"] = pnl_pct
+
+    return peaks
+
+
+def migrate_state(state):
+    state.setdefault("starting_capital", STARTING_CAPITAL)
+    state.setdefault("cash", STARTING_CAPITAL)
+    state.setdefault("positions", [])
+    state.setdefault("reports", [])
+    state.setdefault("latest", None)
+    state.setdefault("last_alerts", {})
+    state.setdefault("last_daily_report_date", None)
+    state.setdefault("last_trade_slot", None)
+    state.setdefault("realized_pnl_jpy", 0)
+    state.setdefault("realized_trades", [])
+    state["strategy_version"] = STRATEGY_VERSION
+
+    peaks = infer_peaks_from_reports(state)
+
+    for pos in state.get("positions", []):
+        ticker = pos.get("ticker")
+        buy_price = safe_float(pos.get("buy_price_jpy"))
+        current_price = safe_float(pos.get("current_price_jpy"))
+        current_pnl = safe_float(pos.get("pnl_pct"))
+
+        inferred = peaks.get(ticker, {})
+        inferred_peak_price = safe_float(inferred.get("peak_price_jpy"))
+        inferred_peak_pnl = safe_float(inferred.get("peak_pnl_pct"))
+
+        existing_peak_price = safe_float(pos.get("peak_price_jpy"))
+        existing_peak_pnl = safe_float(pos.get("peak_pnl_pct"))
+
+        peak_price_candidates = [
+            value
+            for value in [existing_peak_price, inferred_peak_price, current_price, buy_price]
+            if value is not None
+        ]
+        peak_pnl_candidates = [
+            value
+            for value in [existing_peak_pnl, inferred_peak_pnl, current_pnl]
+            if value is not None
+        ]
+
+        if peak_price_candidates:
+            pos["peak_price_jpy"] = max(peak_price_candidates)
+        if peak_pnl_candidates:
+            pos["peak_pnl_pct"] = max(peak_pnl_candidates)
+
+        pos.setdefault("partial_taken_20", False)
+        pos.setdefault("strategy_version", STRATEGY_VERSION)
+
+    return state
 
 
 def load_state():
@@ -248,15 +354,7 @@ def load_state():
     except Exception:
         return default_state()
 
-    state.setdefault("starting_capital", STARTING_CAPITAL)
-    state.setdefault("cash", STARTING_CAPITAL)
-    state.setdefault("positions", [])
-    state.setdefault("reports", [])
-    state.setdefault("latest", None)
-    state.setdefault("last_alerts", {})
-    state.setdefault("last_daily_report_date", None)
-    state.setdefault("last_trade_slot", None)
-    return state
+    return migrate_state(state)
 
 
 def write_state(state):
@@ -276,7 +374,7 @@ def refresh_positions(positions, market_map):
         qty = int(pos.get("qty", 0))
         buy_price_jpy = safe_float(pos.get("buy_price_jpy"))
         row = market_map.get(ticker, {})
-        current_price_jpy = safe_float(row.get("last_jpy")) or buy_price_jpy
+        current_price_jpy = safe_float(row.get("last_jpy")) or safe_float(pos.get("current_price_jpy")) or buy_price_jpy
 
         if qty <= 0 or current_price_jpy is None:
             continue
@@ -286,11 +384,36 @@ def refresh_positions(positions, market_map):
         pnl_jpy = market_value_jpy - cost_jpy
         pnl_pct = (pnl_jpy / cost_jpy * 100.0) if cost_jpy > 0 else 0.0
 
+        previous_peak_price = safe_float(pos.get("peak_price_jpy"))
+        peak_price_jpy = current_price_jpy
+        if previous_peak_price is not None:
+            peak_price_jpy = max(previous_peak_price, current_price_jpy)
+
+        previous_peak_pnl = safe_float(pos.get("peak_pnl_pct"))
+        peak_pnl_pct = pnl_pct
+        if previous_peak_pnl is not None:
+            peak_pnl_pct = max(previous_peak_pnl, pnl_pct)
+
+        drawdown_from_peak_pct = 0.0
+        if peak_price_jpy and peak_price_jpy > 0:
+            drawdown_from_peak_pct = ((current_price_jpy / peak_price_jpy) - 1.0) * 100.0
+
+        break_even_stop_jpy = None
+        if buy_price_jpy is not None and peak_pnl_pct >= BREAK_EVEN_START_PCT:
+            break_even_stop_jpy = buy_price_jpy * (1.0 + BREAK_EVEN_BUFFER_PCT / 100.0)
+
         new_pos = dict(pos)
         new_pos["current_price_jpy"] = current_price_jpy
         new_pos["market_value_jpy"] = market_value_jpy
         new_pos["pnl_jpy"] = pnl_jpy
         new_pos["pnl_pct"] = pnl_pct
+        new_pos["peak_price_jpy"] = peak_price_jpy
+        new_pos["peak_pnl_pct"] = peak_pnl_pct
+        new_pos["drawdown_from_peak_pct"] = drawdown_from_peak_pct
+        new_pos["break_even_stop_jpy"] = break_even_stop_jpy
+        new_pos.setdefault("partial_taken_20", False)
+        new_pos["strategy_version"] = STRATEGY_VERSION
+
         refreshed.append(new_pos)
 
     return refreshed
@@ -315,8 +438,141 @@ def build_portfolio_snapshot(state, market_data):
         "total_value": total_value,
         "pnl_jpy": pnl_jpy,
         "pnl_pct": pnl_pct,
+        "realized_pnl_jpy": int(state.get("realized_pnl_jpy", 0)),
         "positions": positions,
     }
+
+
+def record_realized_trade(state, ticker, name, qty, sell_price_jpy, buy_price_jpy, reason, current):
+    proceeds = int(qty * sell_price_jpy)
+    cost = int(qty * buy_price_jpy) if buy_price_jpy else proceeds
+    pnl = proceeds - cost
+
+    state["realized_pnl_jpy"] = int(state.get("realized_pnl_jpy", 0)) + pnl
+    trades = state.setdefault("realized_trades", [])
+    trades.append(
+        {
+            "ticker": ticker,
+            "name": name,
+            "qty": qty,
+            "sell_price_jpy": sell_price_jpy,
+            "buy_price_jpy": buy_price_jpy,
+            "proceeds_jpy": proceeds,
+            "cost_jpy": cost,
+            "realized_pnl_jpy": pnl,
+            "reason": reason,
+            "sold_at": current.isoformat(),
+        }
+    )
+    state["realized_trades"] = trades[-100:]
+
+    return proceeds, cost, pnl
+
+
+def decide_sell_action(pos, row):
+    ticker = pos["ticker"]
+    daily_change = row.get("pct_change")
+    change_15m = row.get("change_15m")
+    pnl_pct = safe_float(pos.get("pnl_pct")) or 0.0
+    peak_pnl_pct = safe_float(pos.get("peak_pnl_pct")) or pnl_pct
+    drawdown = safe_float(pos.get("drawdown_from_peak_pct")) or 0.0
+    current_price = safe_float(pos.get("current_price_jpy"))
+    break_even_stop = safe_float(pos.get("break_even_stop_jpy"))
+
+    if change_15m is not None and change_15m <= ALERT_15M_DROP_PCT:
+        return {
+            "type": "sell_all",
+            "action": "paper_sell_alert",
+            "reason": f"15分変化率が大きく下落: {pct(change_15m)}",
+        }
+
+    if daily_change is not None and daily_change <= ALERT_DAY_DROP_PCT:
+        return {
+            "type": "sell_all",
+            "action": "paper_sell_alert",
+            "reason": f"日次下落が大きい: {pct(daily_change)}",
+        }
+
+    if pnl_pct <= STOP_LOSS_PCT:
+        return {
+            "type": "sell_all",
+            "action": "paper_stop_loss",
+            "reason": f"損切りライン到達: {ticker} {pct(pnl_pct)}",
+        }
+
+    if peak_pnl_pct >= TRAILING_START_PCT and drawdown <= TRAILING_DRAWDOWN_PCT:
+        return {
+            "type": "sell_all",
+            "action": "paper_trailing_stop",
+            "reason": f"利益保護: ピーク利益 {pct(peak_pnl_pct)} から {pct(drawdown)} 下落",
+        }
+
+    if break_even_stop is not None and current_price is not None and current_price <= break_even_stop:
+        return {
+            "type": "sell_all",
+            "action": "paper_break_even_stop",
+            "reason": f"建値保護ライン割れ: 現在 {yen(current_price)} / 保護ライン {yen(break_even_stop)}",
+        }
+
+    if (
+        pnl_pct >= PARTIAL_TAKE_PROFIT_PCT
+        and int(pos.get("qty", 0)) >= 2
+        and not bool(pos.get("partial_taken_20", False))
+    ):
+        return {
+            "type": "sell_partial",
+            "action": "paper_take_profit",
+            "reason": f"一部利確: 含み益が {pct(PARTIAL_TAKE_PROFIT_PCT)} 以上",
+        }
+
+    return None
+
+
+def theme_counts(positions):
+    return Counter(pos.get("theme", "") for pos in positions)
+
+
+def candidate_score(row):
+    daily = safe_float(row.get("pct_change"))
+    intraday = safe_float(row.get("change_15m"))
+
+    if daily is None:
+        return -9999
+
+    score = daily * 2.0
+
+    if intraday is not None:
+        score += intraday * 0.5
+        if intraday < 0:
+            score += intraday * 0.5
+
+    return score
+
+
+def is_buy_candidate(row):
+    daily = safe_float(row.get("pct_change"))
+    intraday = safe_float(row.get("change_15m"))
+    last_jpy = safe_float(row.get("last_jpy"))
+
+    if last_jpy is None or last_jpy <= 0:
+        return False, "価格データなし"
+
+    if daily is None:
+        return False, "日次変化率なし"
+
+    if daily < BUY_DAILY_MIN_PCT:
+        return False, f"日次上昇率が不足: {pct(daily)}"
+
+    if daily > BUY_DAILY_MAX_PCT:
+        return False, f"急騰しすぎで追いかけ回避: {pct(daily)}"
+
+    if intraday is not None and intraday < BUY_15M_MIN_PCT:
+        return False, f"短期下落中のため回避: 15分 {pct(intraday)}"
+
+    if intraday is not None and intraday > BUY_15M_MAX_PCT:
+        return False, f"短期急騰しすぎで回避: 15分 {pct(intraday)}"
+
+    return True, "買い候補"
 
 
 def update_paper_portfolio(state, market_data, current):
@@ -330,87 +586,139 @@ def update_paper_portfolio(state, market_data, current):
     for pos in positions:
         ticker = pos["ticker"]
         row = market_map.get(ticker, {})
-        daily_change = row.get("pct_change")
-        change_15m = row.get("change_15m")
-        pnl_pct = pos.get("pnl_pct", 0.0)
+        current_price = safe_float(pos.get("current_price_jpy"))
+        buy_price = safe_float(pos.get("buy_price_jpy"))
+        qty = int(pos.get("qty", 0))
 
-        should_sell = False
-        reason = None
+        action = decide_sell_action(pos, row)
 
-        if change_15m is not None and change_15m <= ALERT_15M_DROP_PCT:
-            should_sell = True
-            reason = f"15分変化率が大きく下落: {pct(change_15m)}"
-        elif daily_change is not None and daily_change <= ALERT_DAY_DROP_PCT:
-            should_sell = True
-            reason = f"日次下落が大きい: {pct(daily_change)}"
-        elif pnl_pct <= -12.0:
-            should_sell = True
-            reason = f"含み損が大きい: {pct(pnl_pct)}"
-
-        if should_sell:
-            proceeds = int(pos["market_value_jpy"])
-            cash += proceeds
-            decisions.append(
-                {
-                    "action": "paper_sell",
-                    "ticker": ticker,
-                    "qty": pos["qty"],
-                    "amount_jpy": proceeds,
-                    "reason": reason,
-                }
-            )
-        else:
+        if action is None:
             kept_positions.append(pos)
+            continue
+
+        if current_price is None or buy_price is None or qty <= 0:
+            kept_positions.append(pos)
+            continue
+
+        if action["type"] == "sell_all":
+            sell_qty = qty
+        else:
+            sell_qty = max(1, qty // 2)
+
+        proceeds, _, realized_pnl = record_realized_trade(
+            state=state,
+            ticker=ticker,
+            name=pos.get("name", ticker),
+            qty=sell_qty,
+            sell_price_jpy=current_price,
+            buy_price_jpy=buy_price,
+            reason=action["reason"],
+            current=current,
+        )
+        cash += proceeds
+
+        decisions.append(
+            {
+                "action": action["action"],
+                "ticker": ticker,
+                "qty": sell_qty,
+                "amount_jpy": proceeds,
+                "realized_pnl_jpy": realized_pnl,
+                "reason": action["reason"],
+            }
+        )
+
+        remaining_qty = qty - sell_qty
+        if remaining_qty > 0:
+            new_pos = dict(pos)
+            new_pos["qty"] = remaining_qty
+            if action["type"] == "sell_partial":
+                new_pos["partial_taken_20"] = True
+            kept_positions.append(new_pos)
 
     positions = kept_positions
-    held = {pos["ticker"] for pos in positions}
+    state["cash"] = cash
+    state["positions"] = positions
+    portfolio_before_buy = build_portfolio_snapshot(state, market_data)
 
-    for cand in market_data:
+    held = {pos["ticker"] for pos in positions}
+    counts = theme_counts(positions)
+    total_value = portfolio_before_buy["total_value"]
+    min_cash = int(total_value * MIN_CASH_RATIO)
+
+    candidates = sorted(market_data, key=candidate_score, reverse=True)
+
+    for cand in candidates:
         if len(positions) >= MAX_POSITIONS:
             break
 
-        if cand["ticker"] in held:
+        ticker = cand["ticker"]
+        if ticker in held:
             continue
 
-        if cand["pct_change"] is None or cand["pct_change"] < 1.5:
+        ok, reason = is_buy_candidate(cand)
+        if not ok:
             continue
 
-        if cand["last_jpy"] is None or cand["last_jpy"] <= 0:
+        theme = cand.get("theme", "")
+        if counts[theme] >= MAX_THEME_POSITIONS:
             continue
 
-        allocation = min(int(STARTING_CAPITAL * 0.20), int(cash * 0.35))
-        qty = int(allocation // cand["last_jpy"])
+        last_jpy = safe_float(cand.get("last_jpy"))
+        if last_jpy is None or last_jpy <= 0:
+            continue
 
+        available_cash = cash - min_cash
+        if available_cash <= 0:
+            break
+
+        allocation = min(
+            int(total_value * BUY_ALLOCATION_RATIO),
+            int(STARTING_CAPITAL * 0.15),
+            int(available_cash),
+        )
+
+        max_position_value = int(total_value * MAX_POSITION_WEIGHT)
+        allocation = min(allocation, max_position_value)
+
+        qty = int(allocation // last_jpy)
         if qty <= 0:
             continue
 
-        cost = int(qty * cand["last_jpy"])
-
-        if cost > cash:
+        cost = int(qty * last_jpy)
+        if cost > cash or cash - cost < min_cash:
             continue
 
         cash -= cost
         position = {
-            "ticker": cand["ticker"],
+            "ticker": ticker,
             "name": cand["name"],
+            "theme": cand.get("theme", ""),
             "qty": qty,
-            "buy_price_jpy": cand["last_jpy"],
-            "current_price_jpy": cand["last_jpy"],
+            "buy_price_jpy": last_jpy,
+            "current_price_jpy": last_jpy,
             "market_value_jpy": cost,
             "pnl_jpy": 0,
             "pnl_pct": 0.0,
+            "peak_price_jpy": last_jpy,
+            "peak_pnl_pct": 0.0,
+            "drawdown_from_peak_pct": 0.0,
+            "break_even_stop_jpy": None,
+            "partial_taken_20": False,
+            "strategy_version": STRATEGY_VERSION,
             "bought_at": current.isoformat(),
         }
         positions.append(position)
-        held.add(cand["ticker"])
+        held.add(ticker)
+        counts[theme] += 1
 
         decisions.append(
             {
                 "action": "paper_buy",
-                "ticker": cand["ticker"],
+                "ticker": ticker,
                 "qty": qty,
                 "amount_jpy": cost,
-                "reason": f"監視銘柄内で上昇率が高い: {pct(cand['pct_change'])}",
+                "reason": f"上昇継続候補: 日次 {pct(cand['pct_change'])} / 15分 {pct(cand.get('change_15m'))}",
             }
         )
 
@@ -426,7 +734,7 @@ def update_paper_portfolio(state, market_data, current):
                 "ticker": "-",
                 "qty": 0,
                 "amount_jpy": 0,
-                "reason": "新規売買条件を満たす銘柄なし。ペーパートレードは保有継続。",
+                "reason": "売買条件を満たす銘柄なし。利益保護ルールを維持して保有継続。",
             }
         )
 
@@ -479,6 +787,46 @@ def detect_alerts(state, market_data, current):
     return alerts
 
 
+def build_outlook(market_data):
+    valid = [row for row in market_data if row.get("pct_change") is not None]
+    if not valid:
+        return {
+            "label": "中立",
+            "reason": "有効な変化率データが不足",
+        }
+
+    changes = [float(row["pct_change"]) for row in valid]
+    avg_change = sum(changes) / len(changes)
+    positive_ratio = len([v for v in changes if v > 0]) / len(changes)
+    sharp_drop_count = len([v for v in changes if v <= ALERT_DAY_DROP_PCT])
+    strong_gain_count = len([v for v in changes if v >= 3.0])
+
+    if sharp_drop_count >= 2:
+        label = "高ボラ警戒"
+        reason = f"日次 {pct(ALERT_DAY_DROP_PCT)} 以下が {sharp_drop_count} 銘柄"
+    elif avg_change >= 1.0 and positive_ratio >= 0.6:
+        label = "強気"
+        reason = f"平均変化率 {pct(avg_change)}、上昇銘柄比率 {positive_ratio:.0%}"
+    elif avg_change <= -1.0 and positive_ratio <= 0.4:
+        label = "弱気"
+        reason = f"平均変化率 {pct(avg_change)}、上昇銘柄比率 {positive_ratio:.0%}"
+    elif strong_gain_count >= 4:
+        label = "強気寄り"
+        reason = f"+3%以上の銘柄が {strong_gain_count} 銘柄"
+    else:
+        label = "中立"
+        reason = f"平均変化率 {pct(avg_change)}、上昇銘柄比率 {positive_ratio:.0%}"
+
+    return {
+        "label": label,
+        "reason": reason,
+        "avg_change_pct": avg_change,
+        "positive_ratio": positive_ratio,
+        "sharp_drop_count": sharp_drop_count,
+        "strong_gain_count": strong_gain_count,
+    }
+
+
 def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
     return {
         "date": current.strftime("%Y-%m-%d"),
@@ -488,6 +836,18 @@ def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
         "universe": "AI/半導体インフラ",
         "paper_trade": True,
         "real_trade": False,
+        "strategy_version": STRATEGY_VERSION,
+        "risk_rules": {
+            "stop_loss_pct": STOP_LOSS_PCT,
+            "break_even_start_pct": BREAK_EVEN_START_PCT,
+            "break_even_buffer_pct": BREAK_EVEN_BUFFER_PCT,
+            "trailing_start_pct": TRAILING_START_PCT,
+            "trailing_drawdown_pct": TRAILING_DRAWDOWN_PCT,
+            "partial_take_profit_pct": PARTIAL_TAKE_PROFIT_PCT,
+            "min_cash_ratio": MIN_CASH_RATIO,
+            "max_position_weight": MAX_POSITION_WEIGHT,
+        },
+        "outlook": build_outlook(market_data),
         "usd_jpy": usd_jpy,
         "market_data": market_data,
         "portfolio": portfolio,
@@ -507,11 +867,16 @@ def make_discord_message(report):
     market = report["market_data"]
     portfolio = report["portfolio"]
     decisions = report["decisions"]
+    outlook = report.get("outlook", {})
 
     top = market[:7]
     lines = []
     lines.append("**Daily Discord Market Report**")
     lines.append(f"{report['date']} {report['time']} JST")
+    lines.append(f"Strategy: {report.get('strategy_version', '-')}")
+    lines.append("")
+    lines.append(f"**翌営業日方向感**: {outlook.get('label', '-')}")
+    lines.append(f"- 理由: {outlook.get('reason', '-')}")
     lines.append("")
     lines.append("**AI/半導体インフラ監視 上位銘柄**")
 
@@ -526,19 +891,22 @@ def make_discord_message(report):
     lines.append(f"- 現金: {yen(portfolio['cash'])}")
     lines.append(f"- 評価額: {yen(portfolio['position_value'])}")
     lines.append(f"- 損益: {yen(portfolio['pnl_jpy'])} ({pct(portfolio['pnl_pct'])})")
+    lines.append(f"- 確定損益累計: {yen(portfolio.get('realized_pnl_jpy', 0))}")
     lines.append("")
 
     if portfolio["positions"]:
         lines.append("**保有中**")
         for pos in portfolio["positions"]:
             lines.append(
-                f"- {pos['ticker']}: {pos['qty']}株 / 評価 {yen(pos['market_value_jpy'])} / 損益 {yen(pos['pnl_jpy'])} ({pct(pos['pnl_pct'])})"
+                f"- {pos['ticker']}: {pos['qty']}株 / 評価 {yen(pos['market_value_jpy'])} / 損益 {yen(pos['pnl_jpy'])} ({pct(pos['pnl_pct'])}) / 高値比 {pct(pos.get('drawdown_from_peak_pct'))}"
             )
         lines.append("")
 
     lines.append("**判断**")
     for item in decisions:
-        lines.append(f"- {item['action']}: {item['ticker']} - {item['reason']}")
+        realized = item.get("realized_pnl_jpy")
+        realized_text = f" / 確定損益 {yen(realized)}" if realized is not None else ""
+        lines.append(f"- {item['action']}: {item['ticker']} {item.get('qty', 0)}株 - {item['reason']}{realized_text}")
 
     lines.append("")
     lines.append("※実売買なし。GitHub Actions上のペーパートレード記録のみ。")
