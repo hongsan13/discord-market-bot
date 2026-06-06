@@ -19,7 +19,7 @@ MAX_REPORTS = 240
 DATA_PATH = Path("data/reports.json")
 DOCS_DATA_PATH = Path("docs/data/reports.json")
 
-STRATEGY_VERSION = "v2_profit_protection"
+STRATEGY_VERSION = "v3_buy_discipline"
 
 ALERT_15M_DROP_PCT = -3.0
 ALERT_DAY_DROP_PCT = -6.0
@@ -32,15 +32,44 @@ TRAILING_START_PCT = 15.0
 TRAILING_DRAWDOWN_PCT = -7.0
 PARTIAL_TAKE_PROFIT_PCT = 20.0
 
-BUY_DAILY_MIN_PCT = 1.5
-BUY_DAILY_MAX_PCT = 12.0
-BUY_15M_MIN_PCT = -1.0
-BUY_15M_MAX_PCT = 4.0
+BUY_DAILY_MIN_PCT = 1.2
+BUY_DAILY_MAX_PCT = 8.0
+BUY_15M_MIN_PCT = -0.7
+BUY_15M_MAX_PCT = 2.5
 
-MIN_CASH_RATIO = 0.20
-BUY_ALLOCATION_RATIO = 0.12
-MAX_POSITION_WEIGHT = 0.25
+MIN_CASH_RATIO = 0.25
+BUY_ALLOCATION_RATIO = 0.10
+MAX_POSITION_WEIGHT = 0.22
 MAX_THEME_POSITIONS = 2
+
+# v3: 買い規律
+# 通常買いは「個別銘柄が強く、かつセクター全体が崩れていない」場合だけ行う。
+# セクター全体が暴落している場合は、通常買いを止め、S/A格付け銘柄だけ少額の打診買いを許可する。
+BUY_COOLDOWN_HOURS = 36
+PROBE_COOLDOWN_HOURS = 12
+PORTFOLIO_NORMAL_BUY_STOP_DD_PCT = -3.0
+PORTFOLIO_PROBE_STOP_DD_PCT = -8.0
+SECTOR_WEAK_AVG_PCT = -2.0
+SECTOR_CRASH_AVG_PCT = -4.0
+SECTOR_WEAK_RATIO_THRESHOLD = 0.45
+SECTOR_CRASH_RATIO_THRESHOLD = 0.30
+PROBE_DAILY_MIN_PCT = -12.0
+PROBE_DAILY_MAX_PCT = -4.0
+PROBE_15M_MIN_PCT = -0.3
+PROBE_15M_MAX_PCT = 1.5
+PROBE_ALLOCATION_RATIO = 0.04
+PROBE_MIN_CASH_RATIO = 0.55
+
+TICKER_GRADES = {
+    "NVDA": "S", "TSM": "S", "ASML": "S", "MSFT": "S",
+    "AVGO": "A", "AMD": "A", "AMAT": "A", "8035.T": "A", "6857.T": "A", "6146.T": "A",
+    "MU": "A", "WDC": "A", "VRT": "A", "ETN": "A", "ANET": "A", "GOOGL": "A", "AMZN": "A",
+    "DELL": "B", "STX": "B", "285A.T": "B", "CRWD": "B", "PANW": "B",
+    "7011.T": "B", "7012.T": "B", "7013.T": "B",
+    "SMCI": "R", "SNDK": "R",
+}
+
+GRADE_SCORE = {"S": 12, "A": 8, "B": 4, "R": -4}
 
 WATCHLIST = [
     {"ticker": "WDC", "name": "Western Digital", "currency": "USD", "theme": "メモリ・ストレージ"},
@@ -229,6 +258,8 @@ def fetch_market_data():
                 "ticker": ticker,
                 "name": item["name"],
                 "theme": item["theme"],
+                "sector": broad_sector(item["theme"]),
+                "grade": TICKER_GRADES.get(ticker, "B"),
                 "currency": item["currency"],
                 "last": last,
                 "last_jpy": last_jpy,
@@ -257,6 +288,8 @@ def default_state():
         "last_trade_slot": None,
         "realized_pnl_jpy": 0,
         "realized_trades": [],
+        "portfolio_peak_value_jpy": STARTING_CAPITAL,
+        "sector_cooldowns": {},
         "strategy_version": STRATEGY_VERSION,
     }
 
@@ -306,6 +339,20 @@ def migrate_state(state):
     state.setdefault("last_trade_slot", None)
     state.setdefault("realized_pnl_jpy", 0)
     state.setdefault("realized_trades", [])
+    state.setdefault("sector_cooldowns", {})
+
+    peak_values = [STARTING_CAPITAL]
+    for report in state.get("reports", []):
+        value = safe_float(report.get("portfolio", {}).get("total_value"))
+        if value is not None:
+            peak_values.append(value)
+    latest_value = safe_float(state.get("latest", {}).get("portfolio", {}).get("total_value"))
+    if latest_value is not None:
+        peak_values.append(latest_value)
+    existing_peak = safe_float(state.get("portfolio_peak_value_jpy"))
+    if existing_peak is not None:
+        peak_values.append(existing_peak)
+    state["portfolio_peak_value_jpy"] = int(max(peak_values))
     state["strategy_version"] = STRATEGY_VERSION
 
     peaks = infer_peaks_from_reports(state)
@@ -429,6 +476,11 @@ def build_portfolio_snapshot(state, market_data):
     pnl_jpy = total_value - STARTING_CAPITAL
     pnl_pct = pnl_jpy / STARTING_CAPITAL * 100.0
 
+    previous_peak = int(state.get("portfolio_peak_value_jpy", STARTING_CAPITAL))
+    portfolio_peak = max(previous_peak, total_value)
+    state["portfolio_peak_value_jpy"] = portfolio_peak
+    portfolio_drawdown_pct = ((total_value / portfolio_peak) - 1.0) * 100.0 if portfolio_peak > 0 else 0.0
+
     state["positions"] = positions
 
     return {
@@ -439,6 +491,8 @@ def build_portfolio_snapshot(state, market_data):
         "pnl_jpy": pnl_jpy,
         "pnl_pct": pnl_pct,
         "realized_pnl_jpy": int(state.get("realized_pnl_jpy", 0)),
+        "portfolio_peak_value_jpy": portfolio_peak,
+        "portfolio_drawdown_pct": portfolio_drawdown_pct,
         "positions": positions,
     }
 
@@ -528,52 +582,237 @@ def decide_sell_action(pos, row):
     return None
 
 
+def broad_sector(theme: str) -> str:
+    if theme in {
+        "AI半導体",
+        "AI・ネットワーク",
+        "AI/ネットワーク",
+        "AIサーバー",
+        "メモリ・ストレージ",
+        "メモリ",
+        "ストレージ",
+        "半導体製造装置",
+        "ファウンドリ",
+    }:
+        return "半導体・AIインフラ"
+    if theme in {"データセンター電力・冷却", "データセンター電源/冷却", "データセンターネットワーク"}:
+        return "データセンター周辺"
+    if theme in {"AIクラウド"}:
+        return "AIクラウド"
+    if theme in {"サイバーセキュリティ"}:
+        return "サイバーセキュリティ"
+    if theme in {"防衛・宇宙"}:
+        return "防衛・宇宙"
+    return theme or "その他"
+
+
 def theme_counts(positions):
     return Counter(pos.get("theme", "") for pos in positions)
 
 
-def candidate_score(row):
+def sector_counts(positions):
+    return Counter(broad_sector(pos.get("theme", "")) for pos in positions)
+
+
+def analyze_sectors(market_data):
+    grouped = {}
+    for row in market_data:
+        sector = row.get("sector") or broad_sector(row.get("theme", ""))
+        daily = safe_float(row.get("pct_change"))
+        if daily is None:
+            continue
+        grouped.setdefault(sector, []).append(daily)
+
+    result = {}
+    for sector, values in grouped.items():
+        count = len(values)
+        avg_daily = sum(values) / count if count else 0.0
+        weak_ratio = sum(1 for value in values if value <= -3.0) / count if count else 0.0
+        crash_ratio = sum(1 for value in values if value <= -6.0) / count if count else 0.0
+        positive_ratio = sum(1 for value in values if value > 0.0) / count if count else 0.0
+
+        if avg_daily <= SECTOR_CRASH_AVG_PCT or crash_ratio >= SECTOR_CRASH_RATIO_THRESHOLD:
+            status = "crash"
+        elif avg_daily <= SECTOR_WEAK_AVG_PCT or weak_ratio >= SECTOR_WEAK_RATIO_THRESHOLD:
+            status = "weak"
+        elif avg_daily >= 1.0 and positive_ratio >= 0.5:
+            status = "strong"
+        else:
+            status = "neutral"
+
+        result[sector] = {
+            "sector": sector,
+            "count": count,
+            "avg_daily_pct": avg_daily,
+            "weak_ratio": weak_ratio,
+            "crash_ratio": crash_ratio,
+            "positive_ratio": positive_ratio,
+            "status": status,
+        }
+
+    return result
+
+
+def get_sector_status(row, sector_stats):
+    sector = row.get("sector") or broad_sector(row.get("theme", ""))
+    return sector_stats.get(sector, {"sector": sector, "status": "neutral", "avg_daily_pct": 0.0, "weak_ratio": 0.0, "crash_ratio": 0.0})
+
+
+def parse_dt(value):
+    try:
+        return datetime.fromisoformat(value)
+    except Exception:
+        return None
+
+
+def cooldown_remaining_hours(state, sector, current):
+    raw = state.setdefault("sector_cooldowns", {}).get(sector)
+    if not raw:
+        return 0.0
+    until = parse_dt(raw)
+    if until is None:
+        return 0.0
+    remaining = until - current
+    if remaining.total_seconds() <= 0:
+        return 0.0
+    return remaining.total_seconds() / 3600.0
+
+
+def set_sector_cooldown(state, sector, current, hours=BUY_COOLDOWN_HOURS):
+    state.setdefault("sector_cooldowns", {})[sector] = (current + timedelta(hours=hours)).isoformat()
+
+
+def candidate_score(row, sector_stats=None):
     daily = safe_float(row.get("pct_change"))
     intraday = safe_float(row.get("change_15m"))
+    grade = row.get("grade") or TICKER_GRADES.get(row.get("ticker"), "B")
 
     if daily is None:
         return -9999
 
-    score = daily * 2.0
+    score = daily * 2.0 + GRADE_SCORE.get(grade, 0)
 
     if intraday is not None:
         score += intraday * 0.5
         if intraday < 0:
             score += intraday * 0.5
 
+    if sector_stats:
+        status = get_sector_status(row, sector_stats).get("status")
+        if status == "strong":
+            score += 4
+        elif status == "neutral":
+            score += 0
+        elif status == "weak":
+            score -= 8
+        elif status == "crash":
+            score -= 16
+
     return score
 
 
-def is_buy_candidate(row):
+def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_sectors):
+    ticker = row.get("ticker")
+    grade = row.get("grade") or TICKER_GRADES.get(ticker, "B")
     daily = safe_float(row.get("pct_change"))
     intraday = safe_float(row.get("change_15m"))
     last_jpy = safe_float(row.get("last_jpy"))
+    sector_info = get_sector_status(row, sector_stats)
+    sector = sector_info.get("sector")
+    sector_status = sector_info.get("status")
+    sector_avg = safe_float(sector_info.get("avg_daily_pct")) or 0.0
+    cooldown_hours = cooldown_remaining_hours(state, sector, current)
+    portfolio_dd = safe_float(portfolio.get("portfolio_drawdown_pct")) or 0.0
+    cash = int(portfolio.get("cash", 0))
+    total_value = int(portfolio.get("total_value", STARTING_CAPITAL))
+    cash_ratio = cash / total_value if total_value > 0 else 0.0
 
     if last_jpy is None or last_jpy <= 0:
-        return False, "価格データなし"
-
+        return {"ok": False, "reason": "価格データなし"}
     if daily is None:
-        return False, "日次変化率なし"
+        return {"ok": False, "reason": "日次変化率なし"}
 
+    # 通常買い: セクターが崩れていないことを必須にする。
+    normal_allowed = True
+    normal_reason = []
+
+    if grade == "R":
+        normal_allowed = False
+        normal_reason.append("R格付けは通常買い禁止")
+    if sector_status in {"weak", "crash"}:
+        normal_allowed = False
+        normal_reason.append(f"セクター地合いが弱い: {sector_status} 平均{pct(sector_avg)}")
+    if cooldown_hours > 0:
+        normal_allowed = False
+        normal_reason.append(f"セクター冷却中: 残り{cooldown_hours:.1f}時間")
+    if portfolio_dd <= PORTFOLIO_NORMAL_BUY_STOP_DD_PCT and sector != "防衛・宇宙":
+        normal_allowed = False
+        normal_reason.append(f"総資産ドローダウン中: {pct(portfolio_dd)}")
     if daily < BUY_DAILY_MIN_PCT:
-        return False, f"日次上昇率が不足: {pct(daily)}"
-
+        normal_allowed = False
+        normal_reason.append(f"日次上昇率が不足: {pct(daily)}")
     if daily > BUY_DAILY_MAX_PCT:
-        return False, f"急騰しすぎで追いかけ回避: {pct(daily)}"
-
+        normal_allowed = False
+        normal_reason.append(f"急騰しすぎで追いかけ回避: {pct(daily)}")
     if intraday is not None and intraday < BUY_15M_MIN_PCT:
-        return False, f"短期下落中のため回避: 15分 {pct(intraday)}"
-
+        normal_allowed = False
+        normal_reason.append(f"短期下落中: 15分{pct(intraday)}")
     if intraday is not None and intraday > BUY_15M_MAX_PCT:
-        return False, f"短期急騰しすぎで回避: 15分 {pct(intraday)}"
+        normal_allowed = False
+        normal_reason.append(f"短期急騰しすぎ: 15分{pct(intraday)}")
 
-    return True, "買い候補"
+    if normal_allowed:
+        return {
+            "ok": True,
+            "mode": "normal_momentum",
+            "allocation_ratio": BUY_ALLOCATION_RATIO,
+            "min_cash_ratio": MIN_CASH_RATIO,
+            "reason": f"通常買い: {grade}格付け / 日次{pct(daily)} / 15分{pct(intraday)} / セクター{sector_status}",
+        }
 
+    # 打診買い: セクター暴落時に、底値を完全に逃さないための小額枠。
+    # ただし、現金が厚い・S/A格付け・短期下落が止まりかけ、という条件を満たす場合だけ。
+    probe_allowed = True
+    probe_reason = []
+
+    if sector_status not in {"weak", "crash"}:
+        probe_allowed = False
+        probe_reason.append("セクター暴落局面ではない")
+    if grade not in {"S", "A"}:
+        probe_allowed = False
+        probe_reason.append(f"打診買い対象外格付け: {grade}")
+    if daily < PROBE_DAILY_MIN_PCT or daily > PROBE_DAILY_MAX_PCT:
+        probe_allowed = False
+        probe_reason.append(f"打診買いの日次範囲外: {pct(daily)}")
+    if intraday is not None and intraday < PROBE_15M_MIN_PCT:
+        probe_allowed = False
+        probe_reason.append(f"短期下落が止まっていない: 15分{pct(intraday)}")
+    if intraday is not None and intraday > PROBE_15M_MAX_PCT:
+        probe_allowed = False
+        probe_reason.append(f"反発が急すぎる: 15分{pct(intraday)}")
+    if cooldown_hours > BUY_COOLDOWN_HOURS - PROBE_COOLDOWN_HOURS:
+        probe_allowed = False
+        probe_reason.append(f"損切り直後のため打診買い禁止: 残り{cooldown_hours:.1f}時間")
+    if portfolio_dd <= PORTFOLIO_PROBE_STOP_DD_PCT:
+        probe_allowed = False
+        probe_reason.append(f"総資産ドローダウンが深すぎる: {pct(portfolio_dd)}")
+    if cash_ratio < PROBE_MIN_CASH_RATIO:
+        probe_allowed = False
+        probe_reason.append(f"打診買いには現金不足: 現金比率{pct(cash_ratio * 100)}")
+    if sector in held_sectors:
+        probe_allowed = False
+        probe_reason.append("同一セクターを既に保有中のため打診買いしない")
+
+    if probe_allowed:
+        return {
+            "ok": True,
+            "mode": "rebound_probe",
+            "allocation_ratio": PROBE_ALLOCATION_RATIO,
+            "min_cash_ratio": PROBE_MIN_CASH_RATIO,
+            "reason": f"暴落後の打診買い: {grade}格付け / 日次{pct(daily)} / 15分{pct(intraday)} / セクター平均{pct(sector_avg)}",
+        }
+
+    return {"ok": False, "reason": "通常買い不可: " + "; ".join(normal_reason[:3]) + " / 打診買い不可: " + "; ".join(probe_reason[:3])}
 
 def update_paper_portfolio(state, market_data, current):
     market_map = {row["ticker"]: row for row in market_data}
@@ -628,6 +867,9 @@ def update_paper_portfolio(state, market_data, current):
             }
         )
 
+        if action["action"] in {"paper_sell_alert", "paper_stop_loss"}:
+            set_sector_cooldown(state, broad_sector(pos.get("theme", "")), current)
+
         remaining_qty = qty - sell_qty
         if remaining_qty > 0:
             new_pos = dict(pos)
@@ -646,7 +888,9 @@ def update_paper_portfolio(state, market_data, current):
     total_value = portfolio_before_buy["total_value"]
     min_cash = int(total_value * MIN_CASH_RATIO)
 
-    candidates = sorted(market_data, key=candidate_score, reverse=True)
+    sector_stats = analyze_sectors(market_data)
+    held_sectors = sector_counts(positions)
+    candidates = sorted(market_data, key=lambda row: candidate_score(row, sector_stats), reverse=True)
 
     for cand in candidates:
         if len(positions) >= MAX_POSITIONS:
@@ -656,11 +900,12 @@ def update_paper_portfolio(state, market_data, current):
         if ticker in held:
             continue
 
-        ok, reason = is_buy_candidate(cand)
-        if not ok:
+        buy_decision = classify_buy_candidate(cand, sector_stats, state, current, portfolio_before_buy, held_sectors)
+        if not buy_decision.get("ok"):
             continue
 
         theme = cand.get("theme", "")
+        sector = cand.get("sector") or broad_sector(theme)
         if counts[theme] >= MAX_THEME_POSITIONS:
             continue
 
@@ -668,12 +913,14 @@ def update_paper_portfolio(state, market_data, current):
         if last_jpy is None or last_jpy <= 0:
             continue
 
-        available_cash = cash - min_cash
+        min_cash_for_buy = int(total_value * buy_decision.get("min_cash_ratio", MIN_CASH_RATIO))
+        available_cash = cash - min_cash_for_buy
         if available_cash <= 0:
             break
 
+        allocation_ratio = buy_decision.get("allocation_ratio", BUY_ALLOCATION_RATIO)
         allocation = min(
-            int(total_value * BUY_ALLOCATION_RATIO),
+            int(total_value * allocation_ratio),
             int(STARTING_CAPITAL * 0.15),
             int(available_cash),
         )
@@ -686,7 +933,7 @@ def update_paper_portfolio(state, market_data, current):
             continue
 
         cost = int(qty * last_jpy)
-        if cost > cash or cash - cost < min_cash:
+        if cost > cash or cash - cost < min_cash_for_buy:
             continue
 
         cash -= cost
@@ -694,6 +941,8 @@ def update_paper_portfolio(state, market_data, current):
             "ticker": ticker,
             "name": cand["name"],
             "theme": cand.get("theme", ""),
+            "sector": sector,
+            "grade": cand.get("grade") or TICKER_GRADES.get(ticker, "B"),
             "qty": qty,
             "buy_price_jpy": last_jpy,
             "current_price_jpy": last_jpy,
@@ -711,6 +960,7 @@ def update_paper_portfolio(state, market_data, current):
         positions.append(position)
         held.add(ticker)
         counts[theme] += 1
+        held_sectors[sector] += 1
 
         decisions.append(
             {
@@ -718,7 +968,8 @@ def update_paper_portfolio(state, market_data, current):
                 "ticker": ticker,
                 "qty": qty,
                 "amount_jpy": cost,
-                "reason": f"上昇継続候補: 日次 {pct(cand['pct_change'])} / 15分 {pct(cand.get('change_15m'))}",
+                "buy_mode": buy_decision.get("mode"),
+                "reason": buy_decision.get("reason"),
             }
         )
 
@@ -850,6 +1101,7 @@ def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
         "outlook": build_outlook(market_data),
         "usd_jpy": usd_jpy,
         "market_data": market_data,
+        "sector_summary": analyze_sectors(market_data),
         "portfolio": portfolio,
         "decisions": decisions,
     }
