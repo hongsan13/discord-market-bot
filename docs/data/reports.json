@@ -26973,12 +26973,499 @@
           "reason": "売買条件を満たす銘柄なし。利益保護ルールを維持して保有継続。"
         }
       ]
+    },
+    {
+      "date": "2026-06-10",
+      "time": "21:43:45",
+      "generated_at": "2026-06-10T21:43:45.669658+09:00",
+      "title": "Daily Discord Market Report",
+      "universe": "AI/半導体インフラ",
+      "paper_trade": true,
+      "real_trade": false,
+      "strategy_version": "v3_buy_discipline",
+      "risk_rules": {
+        "stop_loss_pct": -8.0,
+        "break_even_start_pct": 10.0,
+        "break_even_buffer_pct": 1.0,
+        "trailing_start_pct": 15.0,
+        "trailing_drawdown_pct": -7.0,
+        "partial_take_profit_pct": 20.0,
+        "min_cash_ratio": 0.25,
+        "max_position_weight": 0.22
+      },
+      "outlook": {
+        "label": "強気",
+        "reason": "平均変化率 +1.57%、上昇銘柄比率 63%",
+        "avg_change_pct": 1.5652844916856745,
+        "positive_ratio": 0.6296296296296297,
+        "sharp_drop_count": 1,
+        "strong_gain_count": 8
+      },
+      "usd_jpy": 160.3990020751953,
+      "market_data": [
+        {
+          "ticker": "MU",
+          "name": "Micron",
+          "theme": "メモリ・ストレージ",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "USD",
+          "last": 915.7996,
+          "last_jpy": 146893.34194086306,
+          "pct_change": 9.869100886271065,
+          "change_15m": 1.8800311491823374,
+          "error": null
+        },
+        {
+          "ticker": "AMAT",
+          "name": "Applied Materials",
+          "theme": "半導体製造装置",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "USD",
+          "last": 496.0,
+          "last_jpy": 79557.90502929688,
+          "pct_change": 8.644401407900393,
+          "change_15m": 0.6432238297181536,
+          "error": null
+        },
+        {
+          "ticker": "ASML",
+          "name": "ASML",
+          "theme": "半導体製造装置",
+          "sector": "半導体・AIインフラ",
+          "grade": "S",
+          "currency": "USD",
+          "last": 1746.6273,
+          "last_jpy": 280157.2759172928,
+          "pct_change": 6.535751669958834,
+          "change_15m": 0.6521774207490338,
+          "error": null
+        },
+        {
+          "ticker": "SMCI",
+          "name": "Super Micro Computer",
+          "theme": "AIサーバー",
+          "sector": "半導体・AIインフラ",
+          "grade": "R",
+          "currency": "USD",
+          "last": 35.64,
+          "last_jpy": 5716.620433959961,
+          "pct_change": 5.6436174910285075,
+          "change_15m": -0.8623087621696834,
+          "error": null
+        },
+        {
+          "ticker": "SNDK",
+          "name": "SanDisk",
+          "theme": "メモリ・ストレージ",
+          "sector": "半導体・AIインフラ",
+          "grade": "R",
+          "currency": "USD",
+          "last": 1634.0,
+          "last_jpy": 262091.96939086914,
+          "pct_change": 5.3023148910333,
+          "change_15m": 2.6059654631083173,
+          "error": null
+        },
+        {
+          "ticker": "AMD",
+          "name": "AMD",
+          "theme": "AI半導体",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "USD",
+          "last": 467.98,
+          "last_jpy": 75063.52499114991,
+          "pct_change": 5.135293417107589,
+          "change_15m": 1.6353567162558535,
+          "error": null
+        },
+        {
+          "ticker": "STX",
+          "name": "Seagate",
+          "theme": "ストレージ",
+          "sector": "半導体・AIインフラ",
+          "grade": "B",
+          "currency": "USD",
+          "last": 835.0,
+          "last_jpy": 133933.1667327881,
+          "pct_change": 3.457355403851703,
+          "change_15m": 2.0782396088019572,
+          "error": null
+        },
+        {
+          "ticker": "8035.T",
+          "name": "Tokyo Electron",
+          "theme": "半導体製造装置",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "JPY",
+          "last": 62250.0,
+          "last_jpy": 62250.0,
+          "pct_change": 3.187583444592801,
+          "change_15m": -0.0962927298988947,
+          "error": null
+        },
+        {
+          "ticker": "WDC",
+          "name": "Western Digital",
+          "theme": "メモリ・ストレージ",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "USD",
+          "last": 508.9964,
+          "last_jpy": 81642.51461986694,
+          "pct_change": 2.9723269402788244,
+          "change_15m": 2.575654614647349,
+          "error": null
+        },
+        {
+          "ticker": "AVGO",
+          "name": "Broadcom",
+          "theme": "AI・ネットワーク",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "USD",
+          "last": 387.7105,
+          "last_jpy": 62188.37729407501,
+          "pct_change": 2.818031993256742,
+          "change_15m": 1.2192979272927396,
+          "error": null
+        },
+        {
+          "ticker": "TSM",
+          "name": "TSMC ADR",
+          "theme": "ファウンドリ",
+          "sector": "半導体・AIインフラ",
+          "grade": "S",
+          "currency": "USD",
+          "last": 418.66,
+          "last_jpy": 67152.64620880128,
+          "pct_change": 2.801255868460917,
+          "change_15m": 1.3189419423537796,
+          "error": null
+        },
+        {
+          "ticker": "7012.T",
+          "name": "Kawasaki Heavy Industries",
+          "theme": "防衛・宇宙",
+          "sector": "防衛・宇宙",
+          "grade": "B",
+          "currency": "JPY",
+          "last": 2873.5,
+          "last_jpy": 2873.5,
+          "pct_change": 2.3076923076922995,
+          "change_15m": -0.10429341213280541,
+          "error": null
+        },
+        {
+          "ticker": "ETN",
+          "name": "Eaton",
+          "theme": "データセンター電力・冷却",
+          "sector": "データセンター周辺",
+          "grade": "A",
+          "currency": "USD",
+          "last": 397.7,
+          "last_jpy": 63790.68312530517,
+          "pct_change": 1.8184604138594906,
+          "change_15m": 0.5486309508760501,
+          "error": null
+        },
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA",
+          "theme": "AI半導体",
+          "sector": "半導体・AIインフラ",
+          "grade": "S",
+          "currency": "USD",
+          "last": 205.39,
+          "last_jpy": 32944.35103622436,
+          "pct_change": 1.7259839984335112,
+          "change_15m": 0.6813725490196099,
+          "error": null
+        },
+        {
+          "ticker": "DELL",
+          "name": "Dell",
+          "theme": "AIサーバー",
+          "sector": "半導体・AIインフラ",
+          "grade": "B",
+          "currency": "USD",
+          "last": 375.22,
+          "last_jpy": 60184.91355865479,
+          "pct_change": 1.617681515319691,
+          "change_15m": 0.8855515499840871,
+          "error": null
+        },
+        {
+          "ticker": "ANET",
+          "name": "Arista Networks",
+          "theme": "データセンターネットワーク",
+          "sector": "データセンター周辺",
+          "grade": "A",
+          "currency": "USD",
+          "last": 150.44,
+          "last_jpy": 24130.425872192383,
+          "pct_change": 1.380689417925729,
+          "change_15m": 2.326214120527803,
+          "error": null
+        },
+        {
+          "ticker": "VRT",
+          "name": "Vertiv",
+          "theme": "データセンター電力・冷却",
+          "sector": "データセンター周辺",
+          "grade": "A",
+          "currency": "USD",
+          "last": 286.15,
+          "last_jpy": 45898.17444381714,
+          "pct_change": 0.019965244632125234,
+          "change_15m": 1.9554495838051134,
+          "error": null
+        },
+        {
+          "ticker": "AMZN",
+          "name": "Amazon",
+          "theme": "AIクラウド",
+          "sector": "AIクラウド",
+          "grade": "A",
+          "currency": "USD",
+          "last": 242.86,
+          "last_jpy": 38954.50164398194,
+          "pct_change": -0.32922715222234444,
+          "change_15m": -0.050497422244455414,
+          "error": null
+        },
+        {
+          "ticker": "7013.T",
+          "name": "IHI",
+          "theme": "防衛・宇宙",
+          "sector": "防衛・宇宙",
+          "grade": "B",
+          "currency": "JPY",
+          "last": 2437.0,
+          "last_jpy": 2437.0,
+          "pct_change": -0.7324516785350954,
+          "change_15m": 0.02052123948286244,
+          "error": null
+        },
+        {
+          "ticker": "MSFT",
+          "name": "Microsoft",
+          "theme": "AIクラウド",
+          "sector": "AIクラウド",
+          "grade": "S",
+          "currency": "USD",
+          "last": 399.99,
+          "last_jpy": 64157.99684005738,
+          "pct_change": -1.1831960627074034,
+          "change_15m": 0.2267938476248954,
+          "error": null
+        },
+        {
+          "ticker": "7011.T",
+          "name": "Mitsubishi Heavy Industries",
+          "theme": "防衛・宇宙",
+          "sector": "防衛・宇宙",
+          "grade": "B",
+          "currency": "JPY",
+          "last": 3566.0,
+          "last_jpy": 3566.0,
+          "pct_change": -1.4053458252962225,
+          "change_15m": -0.11204481792717047,
+          "error": null
+        },
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet",
+          "theme": "AIクラウド",
+          "sector": "AIクラウド",
+          "grade": "A",
+          "currency": "USD",
+          "last": 361.987,
+          "last_jpy": 58062.35356419373,
+          "pct_change": -1.4164386177498822,
+          "change_15m": 0.40886181635615415,
+          "error": null
+        },
+        {
+          "ticker": "CRWD",
+          "name": "CrowdStrike",
+          "theme": "サイバーセキュリティ",
+          "sector": "サイバーセキュリティ",
+          "grade": "B",
+          "currency": "USD",
+          "last": 637.8062,
+          "last_jpy": 102303.47799737244,
+          "pct_change": -1.8226045643838895,
+          "change_15m": 1.1427529337139086,
+          "error": null
+        },
+        {
+          "ticker": "6146.T",
+          "name": "Disco",
+          "theme": "半導体製造装置",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "JPY",
+          "last": 69810.0,
+          "last_jpy": 69810.0,
+          "pct_change": -2.0413870246084986,
+          "change_15m": -0.3426124197002167,
+          "error": null
+        },
+        {
+          "ticker": "PANW",
+          "name": "Palo Alto Networks",
+          "theme": "サイバーセキュリティ",
+          "sector": "サイバーセキュリティ",
+          "grade": "B",
+          "currency": "USD",
+          "last": 256.2,
+          "last_jpy": 41094.224331665035,
+          "pct_change": -2.1025552204972264,
+          "change_15m": 0.7669616519174083,
+          "error": null
+        },
+        {
+          "ticker": "6857.T",
+          "name": "Advantest",
+          "theme": "半導体製造装置",
+          "sector": "半導体・AIインフラ",
+          "grade": "A",
+          "currency": "JPY",
+          "last": 25365.0,
+          "last_jpy": 25365.0,
+          "pct_change": -4.158754272692744,
+          "change_15m": -0.21636506687647827,
+          "error": null
+        },
+        {
+          "ticker": "285A.T",
+          "name": "Kioxia",
+          "theme": "メモリ・ストレージ",
+          "sector": "半導体・AIインフラ",
+          "grade": "B",
+          "currency": "JPY",
+          "last": 70700.0,
+          "last_jpy": 70700.0,
+          "pct_change": -7.7828646173969895,
+          "change_15m": -0.952647800504347,
+          "error": null
+        }
+      ],
+      "sector_summary": {
+        "半導体・AIインフラ": {
+          "sector": "半導体・AIインフラ",
+          "count": 16,
+          "avg_daily_pct": 2.8579808132997275,
+          "weak_ratio": 0.125,
+          "crash_ratio": 0.0625,
+          "positive_ratio": 0.8125,
+          "status": "strong"
+        },
+        "防衛・宇宙": {
+          "sector": "防衛・宇宙",
+          "count": 3,
+          "avg_daily_pct": 0.05663160128699385,
+          "weak_ratio": 0.0,
+          "crash_ratio": 0.0,
+          "positive_ratio": 0.3333333333333333,
+          "status": "neutral"
+        },
+        "データセンター周辺": {
+          "sector": "データセンター周辺",
+          "count": 3,
+          "avg_daily_pct": 1.0730383588057817,
+          "weak_ratio": 0.0,
+          "crash_ratio": 0.0,
+          "positive_ratio": 1.0,
+          "status": "strong"
+        },
+        "AIクラウド": {
+          "sector": "AIクラウド",
+          "count": 3,
+          "avg_daily_pct": -0.9762872775598767,
+          "weak_ratio": 0.0,
+          "crash_ratio": 0.0,
+          "positive_ratio": 0.0,
+          "status": "neutral"
+        },
+        "サイバーセキュリティ": {
+          "sector": "サイバーセキュリティ",
+          "count": 2,
+          "avg_daily_pct": -1.962579892440558,
+          "weak_ratio": 0.0,
+          "crash_ratio": 0.0,
+          "positive_ratio": 0.0,
+          "status": "neutral"
+        }
+      },
+      "portfolio": {
+        "starting_capital": 1000000,
+        "cash": 855228,
+        "position_value": 263430,
+        "total_value": 1118658,
+        "pnl_jpy": 118658,
+        "pnl_pct": 11.8658,
+        "realized_pnl_jpy": 127734,
+        "portfolio_peak_value_jpy": 1209638,
+        "portfolio_drawdown_pct": -7.5212584260745725,
+        "positions": [
+          {
+            "ticker": "7011.T",
+            "name": "Mitsubishi Heavy Industries",
+            "theme": "防衛・宇宙",
+            "qty": 36,
+            "buy_price_jpy": 3792.0,
+            "current_price_jpy": 3566.0,
+            "market_value_jpy": 128376,
+            "pnl_jpy": -8136,
+            "pnl_pct": -5.959915611814346,
+            "peak_price_jpy": 3792.0,
+            "peak_pnl_pct": 0.0,
+            "drawdown_from_peak_pct": -5.959915611814348,
+            "break_even_stop_jpy": null,
+            "partial_taken_20": false,
+            "strategy_version": "v3_buy_discipline",
+            "bought_at": "2026-06-05T15:31:47.587109+09:00"
+          },
+          {
+            "ticker": "7012.T",
+            "name": "Kawasaki Heavy Industries",
+            "theme": "防衛・宇宙",
+            "qty": 47,
+            "buy_price_jpy": 2893.5,
+            "current_price_jpy": 2873.5,
+            "market_value_jpy": 135054,
+            "pnl_jpy": -940,
+            "pnl_pct": -0.6912069650131624,
+            "peak_price_jpy": 2893.5,
+            "peak_pnl_pct": 0.0,
+            "drawdown_from_peak_pct": -0.6912044237083137,
+            "break_even_stop_jpy": null,
+            "partial_taken_20": false,
+            "strategy_version": "v3_buy_discipline",
+            "bought_at": "2026-06-06T03:29:29.338715+09:00"
+          }
+        ]
+      },
+      "decisions": [
+        {
+          "action": "hold",
+          "ticker": "-",
+          "qty": 0,
+          "amount_jpy": 0,
+          "reason": "売買条件を満たす銘柄なし。利益保護ルールを維持して保有継続。"
+        }
+      ]
     }
   ],
   "latest": {
     "date": "2026-06-10",
-    "time": "20:10:01",
-    "generated_at": "2026-06-10T20:10:01.938108+09:00",
+    "time": "21:43:45",
+    "generated_at": "2026-06-10T21:43:45.669658+09:00",
     "title": "Daily Discord Market Report",
     "universe": "AI/半導体インフラ",
     "paper_trade": true,
@@ -27002,7 +27489,7 @@
       "sharp_drop_count": 1,
       "strong_gain_count": 8
     },
-    "usd_jpy": 160.50599670410156,
+    "usd_jpy": 160.3990020751953,
     "market_data": [
       {
         "ticker": "MU",
@@ -27011,10 +27498,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "A",
         "currency": "USD",
-        "last": 899.5,
-        "last_jpy": 144375.14403533936,
+        "last": 915.7996,
+        "last_jpy": 146893.34194086306,
         "pct_change": 9.869100886271065,
-        "change_15m": 0.05450439928365025,
+        "change_15m": 1.8800311491823374,
         "error": null
       },
       {
@@ -27024,10 +27511,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "A",
         "currency": "USD",
-        "last": 489.0,
-        "last_jpy": 78487.43238830566,
+        "last": 496.0,
+        "last_jpy": 79557.90502929688,
         "pct_change": 8.644401407900393,
-        "change_15m": -0.8153827430935845,
+        "change_15m": 0.6432238297181536,
         "error": null
       },
       {
@@ -27037,10 +27524,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "S",
         "currency": "USD",
-        "last": 1732.58,
-        "last_jpy": 278089.4797695923,
+        "last": 1746.6273,
+        "last_jpy": 280157.2759172928,
         "pct_change": 6.535751669958834,
-        "change_15m": -1.0169220397856615,
+        "change_15m": 0.6521774207490338,
         "error": null
       },
       {
@@ -27050,10 +27537,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "R",
         "currency": "USD",
-        "last": 36.18,
-        "last_jpy": 5807.106960754394,
+        "last": 35.64,
+        "last_jpy": 5716.620433959961,
         "pct_change": 5.6436174910285075,
-        "change_15m": -0.6589785831960571,
+        "change_15m": -0.8623087621696834,
         "error": null
       },
       {
@@ -27063,10 +27550,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "R",
         "currency": "USD",
-        "last": 1603.2,
-        "last_jpy": 257323.21391601564,
+        "last": 1634.0,
+        "last_jpy": 262091.96939086914,
         "pct_change": 5.3023148910333,
-        "change_15m": -1.030671232063196,
+        "change_15m": 2.6059654631083173,
         "error": null
       },
       {
@@ -27076,10 +27563,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "A",
         "currency": "USD",
-        "last": 459.2367,
-        "last_jpy": 73710.24425660247,
+        "last": 467.98,
+        "last_jpy": 75063.52499114991,
         "pct_change": 5.135293417107589,
-        "change_15m": -0.03554636482367979,
+        "change_15m": 1.6353567162558535,
         "error": null
       },
       {
@@ -27089,10 +27576,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "B",
         "currency": "USD",
-        "last": 825.92,
-        "last_jpy": 132565.11279785156,
+        "last": 835.0,
+        "last_jpy": 133933.1667327881,
         "pct_change": 3.457355403851703,
-        "change_15m": -0.2512077294686055,
+        "change_15m": 2.0782396088019572,
         "error": null
       },
       {
@@ -27115,10 +27602,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "A",
         "currency": "USD",
-        "last": 498.1466,
-        "last_jpy": 79955.5165377594,
+        "last": 508.9964,
+        "last_jpy": 81642.51461986694,
         "pct_change": 2.9723269402788244,
-        "change_15m": -0.8130537801405824,
+        "change_15m": 2.575654614647349,
         "error": null
       },
       {
@@ -27128,10 +27615,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "A",
         "currency": "USD",
-        "last": 383.7742,
-        "last_jpy": 61598.06048031922,
+        "last": 387.7105,
+        "last_jpy": 62188.37729407501,
         "pct_change": 2.818031993256742,
-        "change_15m": -0.24423350553059997,
+        "change_15m": 1.2192979272927396,
         "error": null
       },
       {
@@ -27141,10 +27628,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "S",
         "currency": "USD",
-        "last": 414.29,
-        "last_jpy": 66496.02937454224,
+        "last": 418.66,
+        "last_jpy": 67152.64620880128,
         "pct_change": 2.801255868460917,
-        "change_15m": -0.5719590316823786,
+        "change_15m": 1.3189419423537796,
         "error": null
       },
       {
@@ -27167,10 +27654,10 @@
         "sector": "データセンター周辺",
         "grade": "A",
         "currency": "USD",
-        "last": 392.86,
-        "last_jpy": 63056.38586517334,
+        "last": 397.7,
+        "last_jpy": 63790.68312530517,
         "pct_change": 1.8184604138594906,
-        "change_15m": -0.667509481668771,
+        "change_15m": 0.5486309508760501,
         "error": null
       },
       {
@@ -27180,10 +27667,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "S",
         "currency": "USD",
-        "last": 203.4,
-        "last_jpy": 32646.91972961426,
+        "last": 205.39,
+        "last_jpy": 32944.35103622436,
         "pct_change": 1.7259839984335112,
-        "change_15m": -0.5670707860774282,
+        "change_15m": 0.6813725490196099,
         "error": null
       },
       {
@@ -27193,10 +27680,10 @@
         "sector": "半導体・AIインフラ",
         "grade": "B",
         "currency": "USD",
-        "last": 370.06,
-        "last_jpy": 59396.84914031983,
+        "last": 375.22,
+        "last_jpy": 60184.91355865479,
         "pct_change": 1.617681515319691,
-        "change_15m": -0.40745584997874396,
+        "change_15m": 0.8855515499840871,
         "error": null
       },
       {
@@ -27206,10 +27693,10 @@
         "sector": "データセンター周辺",
         "grade": "A",
         "currency": "USD",
-        "last": 148.02,
-        "last_jpy": 23758.097632141114,
+        "last": 150.44,
+        "last_jpy": 24130.425872192383,
         "pct_change": 1.380689417925729,
-        "change_15m": -0.9899665551839409,
+        "change_15m": 2.326214120527803,
         "error": null
       },
       {
@@ -27219,10 +27706,10 @@
         "sector": "データセンター周辺",
         "grade": "A",
         "currency": "USD",
-        "last": 282.7711,
-        "last_jpy": 45386.45724461517,
+        "last": 286.15,
+        "last_jpy": 45898.17444381714,
         "pct_change": 0.019965244632125234,
-        "change_15m": 0.16687920651787813,
+        "change_15m": 1.9554495838051134,
         "error": null
       },
       {
@@ -27232,10 +27719,10 @@
         "sector": "AIクラウド",
         "grade": "A",
         "currency": "USD",
-        "last": 242.91,
-        "last_jpy": 38988.51165939331,
+        "last": 242.86,
+        "last_jpy": 38954.50164398194,
         "pct_change": -0.32922715222234444,
-        "change_15m": -0.06335779876904812,
+        "change_15m": -0.050497422244455414,
         "error": null
       },
       {
@@ -27258,10 +27745,10 @@
         "sector": "AIクラウド",
         "grade": "S",
         "currency": "USD",
-        "last": 397.89,
-        "last_jpy": 63863.73102859497,
+        "last": 399.99,
+        "last_jpy": 64157.99684005738,
         "pct_change": -1.1831960627074034,
-        "change_15m": -0.31317332264368947,
+        "change_15m": 0.2267938476248954,
         "error": null
       },
       {
@@ -27284,10 +27771,10 @@
         "sector": "AIクラウド",
         "grade": "A",
         "currency": "USD",
-        "last": 359.94,
-        "last_jpy": 57772.52845367431,
+        "last": 361.987,
+        "last_jpy": 58062.35356419373,
         "pct_change": -1.4164386177498822,
-        "change_15m": -0.2272979265994013,
+        "change_15m": 0.40886181635615415,
         "error": null
       },
       {
@@ -27297,10 +27784,10 @@
         "sector": "サイバーセキュリティ",
         "grade": "B",
         "currency": "USD",
-        "last": 632.0,
-        "last_jpy": 101439.78991699219,
+        "last": 637.8062,
+        "last_jpy": 102303.47799737244,
         "pct_change": -1.8226045643838895,
-        "change_15m": -0.4755755724229149,
+        "change_15m": 1.1427529337139086,
         "error": null
       },
       {
@@ -27323,10 +27810,10 @@
         "sector": "サイバーセキュリティ",
         "grade": "B",
         "currency": "USD",
-        "last": 253.4511,
-        "last_jpy": 40680.42142125092,
+        "last": 256.2,
+        "last_jpy": 41094.224331665035,
         "pct_change": -2.1025552204972264,
-        "change_15m": -0.7245567876964065,
+        "change_15m": 0.7669616519174083,
         "error": null
       },
       {
@@ -27484,8 +27971,8 @@
     "6146.T": "2026-06-09T06:25:27.225486+09:00",
     "285A.T": "2026-06-10T20:10:01.938108+09:00"
   },
-  "last_daily_report_date": "2026-06-08",
-  "last_trade_slot": "2026-06-10-20",
+  "last_daily_report_date": "2026-06-10",
+  "last_trade_slot": "2026-06-10-21",
   "realized_pnl_jpy": 127734,
   "realized_trades": [
     {
