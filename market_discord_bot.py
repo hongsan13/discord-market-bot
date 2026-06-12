@@ -19,7 +19,7 @@ MAX_REPORTS = 240
 DATA_PATH = Path("data/reports.json")
 DOCS_DATA_PATH = Path("docs/data/reports.json")
 
-STRATEGY_VERSION = "v3_buy_discipline"
+STRATEGY_VERSION = "v4_reentry_balance"
 
 ALERT_15M_DROP_PCT = -3.0
 ALERT_DAY_DROP_PCT = -6.0
@@ -59,6 +59,36 @@ PROBE_15M_MIN_PCT = -0.3
 PROBE_15M_MAX_PCT = 1.5
 PROBE_ALLOCATION_RATIO = 0.04
 PROBE_MIN_CASH_RATIO = 0.55
+
+# v4: 守りながら戻るための追加規則
+# 暴落後に現金を厚く残しすぎて反発初動を逃す問題を抑える。
+# ただし、一気に戻さず、S/A格付け銘柄へ小口で段階的に再エントリーする。
+REENTRY_DD_TRIGGER_PCT = -5.0
+REENTRY_MIN_CASH_RATIO = 0.70
+REENTRY_DAILY_MIN_PCT = 3.0
+REENTRY_DAILY_MAX_PCT = 10.0
+REENTRY_15M_MIN_PCT = -0.5
+REENTRY_15M_MAX_PCT = 2.5
+REENTRY_ALLOCATION_RATIO = 0.055
+REENTRY_MIN_CASH_AFTER_BUY_RATIO = 0.60
+REENTRY_MIN_WAIT_HOURS_AFTER_COOLDOWN = 12
+MAX_REENTRY_BUYS_PER_SLOT = 2
+
+# 現金比率が高すぎる場合の小口分散買い。
+# 強い地合いで現金が多すぎると機会損失になるため、条件を満たすS/A銘柄へ小さく戻す。
+HIGH_CASH_DEPLOY_TRIGGER_RATIO = 0.85
+HIGH_CASH_DEPLOY_ALLOCATION_RATIO = 0.035
+HIGH_CASH_MIN_AFTER_BUY_RATIO = 0.75
+HIGH_CASH_DAILY_MIN_PCT = 1.5
+HIGH_CASH_DAILY_MAX_PCT = 6.5
+HIGH_CASH_15M_MIN_PCT = -0.4
+HIGH_CASH_15M_MAX_PCT = 2.0
+MAX_HIGH_CASH_BUYS_PER_SLOT = 1
+
+# 防衛・宇宙は逃避先になりやすい一方で、短期過熱後の反落を食らいやすい。
+DEFENSE_OVERHEAT_AVG_PCT = 3.5
+DEFENSE_OVERHEAT_DAILY_PCT = 5.0
+DEFENSE_OVERHEAT_POSITIVE_RATIO = 0.90
 
 TICKER_GRADES = {
     "NVDA": "S", "TSM": "S", "ASML": "S", "MSFT": "S",
@@ -658,6 +688,62 @@ def get_sector_status(row, sector_stats):
     return sector_stats.get(sector, {"sector": sector, "status": "neutral", "avg_daily_pct": 0.0, "weak_ratio": 0.0, "crash_ratio": 0.0})
 
 
+def get_previous_sector_summary(state):
+    """直近レポートのセクター状態を取り出す。なければ空 dict。"""
+    latest = state.get("latest") or {}
+    summary = latest.get("sector_summary")
+    if isinstance(summary, dict) and summary:
+        return summary
+
+    reports = state.get("reports", [])
+    for report in reversed(reports):
+        summary = report.get("sector_summary")
+        if isinstance(summary, dict) and summary:
+            return summary
+    return {}
+
+
+def get_previous_sector_status(state, sector):
+    previous = get_previous_sector_summary(state)
+    info = previous.get(sector, {}) if isinstance(previous, dict) else {}
+    status = info.get("status")
+    if status in {"crash", "weak", "neutral", "strong"}:
+        return status
+    return None
+
+
+def sector_recovered_from_weakness(state, sector, current_status):
+    previous_status = get_previous_sector_status(state, sector)
+    if previous_status in {"crash", "weak"} and current_status in {"neutral", "strong"}:
+        return True
+    return False
+
+
+def is_sector_overheated(row, sector_info):
+    """短期の逃避先過熱を検知。現状では防衛・宇宙だけを強く制限する。"""
+    sector = sector_info.get("sector") or row.get("sector") or broad_sector(row.get("theme", ""))
+    daily = safe_float(row.get("pct_change"))
+    avg_daily = safe_float(sector_info.get("avg_daily_pct")) or 0.0
+    positive_ratio = safe_float(sector_info.get("positive_ratio")) or 0.0
+
+    if sector != "防衛・宇宙":
+        return False
+
+    if daily is not None and daily >= DEFENSE_OVERHEAT_DAILY_PCT:
+        return True
+    if avg_daily >= DEFENSE_OVERHEAT_AVG_PCT and positive_ratio >= DEFENSE_OVERHEAT_POSITIVE_RATIO:
+        return True
+    return False
+
+
+def portfolio_cash_ratio(portfolio):
+    cash = int(portfolio.get("cash", 0))
+    total_value = int(portfolio.get("total_value", STARTING_CAPITAL))
+    if total_value <= 0:
+        return 0.0
+    return cash / total_value
+
+
 def parse_dt(value):
     try:
         return datetime.fromisoformat(value)
@@ -723,16 +809,61 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     sector_avg = safe_float(sector_info.get("avg_daily_pct")) or 0.0
     cooldown_hours = cooldown_remaining_hours(state, sector, current)
     portfolio_dd = safe_float(portfolio.get("portfolio_drawdown_pct")) or 0.0
-    cash = int(portfolio.get("cash", 0))
-    total_value = int(portfolio.get("total_value", STARTING_CAPITAL))
-    cash_ratio = cash / total_value if total_value > 0 else 0.0
+    cash_ratio = portfolio_cash_ratio(portfolio)
+    recovered = sector_recovered_from_weakness(state, sector, sector_status)
+    overheated = is_sector_overheated(row, sector_info)
 
     if last_jpy is None or last_jpy <= 0:
         return {"ok": False, "reason": "価格データなし"}
     if daily is None:
         return {"ok": False, "reason": "日次変化率なし"}
 
-    # 通常買い: セクターが崩れていないことを必須にする。
+    # 1) v4: 反発初動の再エントリー
+    # ポートフォリオDDが深く、現金が厚く、セクターがweak/crashからneutral/strongへ回復した場合だけ小口で戻る。
+    reentry_allowed = True
+    reentry_reason = []
+
+    if grade not in {"S", "A"}:
+        reentry_allowed = False
+        reentry_reason.append(f"再エントリー対象外格付け: {grade}")
+    if portfolio_dd > REENTRY_DD_TRIGGER_PCT:
+        reentry_allowed = False
+        reentry_reason.append(f"再エントリーを使うほどDDが深くない: {pct(portfolio_dd)}")
+    if cash_ratio < REENTRY_MIN_CASH_RATIO:
+        reentry_allowed = False
+        reentry_reason.append(f"再エントリーには現金不足: 現金比率{pct(cash_ratio * 100)}")
+    if not (recovered or sector_status == "strong"):
+        reentry_allowed = False
+        reentry_reason.append(f"セクター回復確認なし: {sector_status}")
+    if sector_status == "crash":
+        reentry_allowed = False
+        reentry_reason.append("セクターcrash中は再エントリーしない")
+    if daily < REENTRY_DAILY_MIN_PCT or daily > REENTRY_DAILY_MAX_PCT:
+        reentry_allowed = False
+        reentry_reason.append(f"再エントリー日次範囲外: {pct(daily)}")
+    if intraday is not None and intraday < REENTRY_15M_MIN_PCT:
+        reentry_allowed = False
+        reentry_reason.append(f"短期下落中: 15分{pct(intraday)}")
+    if intraday is not None and intraday > REENTRY_15M_MAX_PCT:
+        reentry_allowed = False
+        reentry_reason.append(f"短期急騰しすぎ: 15分{pct(intraday)}")
+    if cooldown_hours > BUY_COOLDOWN_HOURS - REENTRY_MIN_WAIT_HOURS_AFTER_COOLDOWN:
+        reentry_allowed = False
+        reentry_reason.append(f"損切り直後の冷却中: 残り{cooldown_hours:.1f}時間")
+    if overheated:
+        reentry_allowed = False
+        reentry_reason.append("逃避先の短期過熱を検知")
+
+    if reentry_allowed:
+        return {
+            "ok": True,
+            "mode": "reentry_recovery",
+            "allocation_ratio": REENTRY_ALLOCATION_RATIO,
+            "min_cash_ratio": REENTRY_MIN_CASH_AFTER_BUY_RATIO,
+            "reason": f"v4再エントリー: {grade}格付け / DD{pct(portfolio_dd)} / 現金比率{pct(cash_ratio * 100)} / 日次{pct(daily)} / セクター{sector_status}",
+        }
+
+    # 2) 通常買い: セクターが崩れていないことを必須にする。
     normal_allowed = True
     normal_reason = []
 
@@ -760,6 +891,9 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     if intraday is not None and intraday > BUY_15M_MAX_PCT:
         normal_allowed = False
         normal_reason.append(f"短期急騰しすぎ: 15分{pct(intraday)}")
+    if overheated:
+        normal_allowed = False
+        normal_reason.append("防衛・宇宙の短期過熱を検知")
 
     if normal_allowed:
         return {
@@ -770,8 +904,7 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
             "reason": f"通常買い: {grade}格付け / 日次{pct(daily)} / 15分{pct(intraday)} / セクター{sector_status}",
         }
 
-    # 打診買い: セクター暴落時に、底値を完全に逃さないための小額枠。
-    # ただし、現金が厚い・S/A格付け・短期下落が止まりかけ、という条件を満たす場合だけ。
+    # 3) 打診買い: セクター暴落時に、底値を完全に逃さないための小額枠。
     probe_allowed = True
     probe_reason = []
 
@@ -802,6 +935,9 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     if sector in held_sectors:
         probe_allowed = False
         probe_reason.append("同一セクターを既に保有中のため打診買いしない")
+    if overheated:
+        probe_allowed = False
+        probe_reason.append("短期過熱セクターは打診買いしない")
 
     if probe_allowed:
         return {
@@ -812,7 +948,52 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
             "reason": f"暴落後の打診買い: {grade}格付け / 日次{pct(daily)} / 15分{pct(intraday)} / セクター平均{pct(sector_avg)}",
         }
 
-    return {"ok": False, "reason": "通常買い不可: " + "; ".join(normal_reason[:3]) + " / 打診買い不可: " + "; ".join(probe_reason[:3])}
+    # 4) v4: 高現金時の小口分散買い。
+    # 大半が現金で、地合いが崩れていないときに限り、S/A銘柄へ小さく戻す。
+    high_cash_allowed = True
+    high_cash_reason = []
+
+    if cash_ratio < HIGH_CASH_DEPLOY_TRIGGER_RATIO:
+        high_cash_allowed = False
+        high_cash_reason.append(f"現金比率が高現金モード未満: {pct(cash_ratio * 100)}")
+    if grade not in {"S", "A"}:
+        high_cash_allowed = False
+        high_cash_reason.append(f"高現金時の分散買い対象外格付け: {grade}")
+    if sector_status not in {"neutral", "strong"}:
+        high_cash_allowed = False
+        high_cash_reason.append(f"セクター地合いが弱い: {sector_status}")
+    if daily < HIGH_CASH_DAILY_MIN_PCT or daily > HIGH_CASH_DAILY_MAX_PCT:
+        high_cash_allowed = False
+        high_cash_reason.append(f"高現金買いの日次範囲外: {pct(daily)}")
+    if intraday is not None and intraday < HIGH_CASH_15M_MIN_PCT:
+        high_cash_allowed = False
+        high_cash_reason.append(f"短期下落中: 15分{pct(intraday)}")
+    if intraday is not None and intraday > HIGH_CASH_15M_MAX_PCT:
+        high_cash_allowed = False
+        high_cash_reason.append(f"短期急騰しすぎ: 15分{pct(intraday)}")
+    if cooldown_hours > 0:
+        high_cash_allowed = False
+        high_cash_reason.append(f"セクター冷却中: 残り{cooldown_hours:.1f}時間")
+    if overheated:
+        high_cash_allowed = False
+        high_cash_reason.append("逃避先の短期過熱を検知")
+
+    if high_cash_allowed:
+        return {
+            "ok": True,
+            "mode": "high_cash_deploy",
+            "allocation_ratio": HIGH_CASH_DEPLOY_ALLOCATION_RATIO,
+            "min_cash_ratio": HIGH_CASH_MIN_AFTER_BUY_RATIO,
+            "reason": f"v4高現金小口分散買い: {grade}格付け / 現金比率{pct(cash_ratio * 100)} / 日次{pct(daily)} / セクター{sector_status}",
+        }
+
+    return {
+        "ok": False,
+        "reason": "通常買い不可: " + "; ".join(normal_reason[:3])
+        + " / 再エントリー不可: " + "; ".join(reentry_reason[:3])
+        + " / 打診買い不可: " + "; ".join(probe_reason[:2])
+        + " / 高現金買い不可: " + "; ".join(high_cash_reason[:2]),
+    }
 
 def update_paper_portfolio(state, market_data, current):
     market_map = {row["ticker"]: row for row in market_data}
@@ -891,6 +1072,8 @@ def update_paper_portfolio(state, market_data, current):
     sector_stats = analyze_sectors(market_data)
     held_sectors = sector_counts(positions)
     candidates = sorted(market_data, key=lambda row: candidate_score(row, sector_stats), reverse=True)
+    reentry_buys = 0
+    high_cash_buys = 0
 
     for cand in candidates:
         if len(positions) >= MAX_POSITIONS:
@@ -902,6 +1085,12 @@ def update_paper_portfolio(state, market_data, current):
 
         buy_decision = classify_buy_candidate(cand, sector_stats, state, current, portfolio_before_buy, held_sectors)
         if not buy_decision.get("ok"):
+            continue
+
+        buy_mode = buy_decision.get("mode")
+        if buy_mode == "reentry_recovery" and reentry_buys >= MAX_REENTRY_BUYS_PER_SLOT:
+            continue
+        if buy_mode == "high_cash_deploy" and high_cash_buys >= MAX_HIGH_CASH_BUYS_PER_SLOT:
             continue
 
         theme = cand.get("theme", "")
@@ -972,6 +1161,11 @@ def update_paper_portfolio(state, market_data, current):
                 "reason": buy_decision.get("reason"),
             }
         )
+
+        if buy_decision.get("mode") == "reentry_recovery":
+            reentry_buys += 1
+        if buy_decision.get("mode") == "high_cash_deploy":
+            high_cash_buys += 1
 
     state["cash"] = cash
     state["positions"] = positions
@@ -1097,6 +1291,12 @@ def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
             "partial_take_profit_pct": PARTIAL_TAKE_PROFIT_PCT,
             "min_cash_ratio": MIN_CASH_RATIO,
             "max_position_weight": MAX_POSITION_WEIGHT,
+            "reentry_dd_trigger_pct": REENTRY_DD_TRIGGER_PCT,
+            "reentry_min_cash_ratio": REENTRY_MIN_CASH_RATIO,
+            "reentry_allocation_ratio": REENTRY_ALLOCATION_RATIO,
+            "high_cash_deploy_trigger_ratio": HIGH_CASH_DEPLOY_TRIGGER_RATIO,
+            "high_cash_deploy_allocation_ratio": HIGH_CASH_DEPLOY_ALLOCATION_RATIO,
+            "defense_overheat_avg_pct": DEFENSE_OVERHEAT_AVG_PCT,
         },
         "outlook": build_outlook(market_data),
         "usd_jpy": usd_jpy,
