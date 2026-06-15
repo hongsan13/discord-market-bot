@@ -19,7 +19,7 @@ MAX_REPORTS = 240
 DATA_PATH = Path("data/reports.json")
 DOCS_DATA_PATH = Path("docs/data/reports.json")
 
-STRATEGY_VERSION = "v4_reentry_balance"
+STRATEGY_VERSION = "v5_rebound_overheat_balance"
 
 ALERT_15M_DROP_PCT = -3.0
 ALERT_DAY_DROP_PCT = -6.0
@@ -89,6 +89,37 @@ MAX_HIGH_CASH_BUYS_PER_SLOT = 1
 DEFENSE_OVERHEAT_AVG_PCT = 3.5
 DEFENSE_OVERHEAT_DAILY_PCT = 5.0
 DEFENSE_OVERHEAT_POSITIVE_RATIO = 0.90
+
+# v5: 週明け高値追い禁止・短期過熱回避・売られすぎ反発の小額買い。
+# 狙いは「Kioxia/SanDiskの高値掴みを避ける」と「SanDiskのような急反発を完全には逃さない」の両立。
+JP_WEEK_OPEN_BUY_BLOCK_MINUTES = 90
+US_WEEK_OPEN_BUY_BLOCK_MINUTES = 90
+
+OVERHEAT_5D_PCT = 15.0
+OVERHEAT_10D_PCT = 22.0
+OVERHEAT_20D_PCT = 30.0
+NEAR_20D_HIGH_RATIO = 0.98
+MEMORY_OVERHEAT_5D_PCT = 12.0
+MEMORY_OVERHEAT_20D_PCT = 25.0
+MEMORY_NEAR_20D_HIGH_RATIO = 0.97
+
+OVERSOLD_5D_PCT = -8.0
+OVERSOLD_10D_PCT = -12.0
+OVERSOLD_20D_PCT = -18.0
+REBOUND_DAILY_MIN_PCT = 5.0
+REBOUND_DAILY_MAX_PCT = 15.0
+REBOUND_15M_MIN_PCT = -0.5
+REBOUND_15M_MAX_PCT = 4.0
+REBOUND_MIN_CASH_RATIO = 0.70
+REBOUND_ALLOCATION_RATIO = 0.03
+REBOUND_MIN_CASH_AFTER_BUY_RATIO = 0.65
+REBOUND_MAX_SINGLE_POSITION_WEIGHT = 0.22
+MAX_OVERSOLD_REBOUND_BUYS_PER_SLOT = 1
+MAX_R_GRADE_REBOUND_POSITIONS = 1
+REBOUND_STOP_LOSS_PCT = -5.0
+REBOUND_TAKE_PROFIT_PCT = 10.0
+REBOUND_TRAILING_START_PCT = 15.0
+REBOUND_TRAILING_DRAWDOWN_PCT = -6.0
 
 TICKER_GRADES = {
     "NVDA": "S", "TSM": "S", "ASML": "S", "MSFT": "S",
@@ -247,6 +278,60 @@ def fetch_intraday_change(ticker: str):
     return last, change_15m
 
 
+def fetch_daily_metrics(ticker: str):
+    """日足から通常の前日比に加え、短期過熱・売られすぎ判定用の指標を返す。"""
+    hist = yf.Ticker(ticker).history(period="3mo", interval="1d", auto_adjust=False)
+    metrics = {
+        "last": None,
+        "pct_change": None,
+        "change_5d": None,
+        "change_10d": None,
+        "change_20d": None,
+        "high_20d": None,
+        "high_20d_ratio": None,
+        "distance_from_20d_high_pct": None,
+    }
+
+    if hist is None or hist.empty or "Close" not in hist.columns:
+        return metrics
+
+    closes = []
+    for raw in hist["Close"].dropna().tolist():
+        value = safe_float(raw)
+        if value is not None and value > 0:
+            closes.append(value)
+
+    if not closes:
+        return metrics
+
+    last = closes[-1]
+    metrics["last"] = last
+
+    def change_from_n_days(n):
+        if len(closes) <= n:
+            return None
+        base = closes[-1 - n]
+        if base <= 0:
+            return None
+        return ((last / base) - 1.0) * 100.0
+
+    metrics["pct_change"] = change_from_n_days(1)
+    metrics["change_5d"] = change_from_n_days(5)
+    metrics["change_10d"] = change_from_n_days(10)
+    metrics["change_20d"] = change_from_n_days(20)
+
+    window_20 = closes[-20:] if len(closes) >= 20 else closes
+    if window_20:
+        high_20d = max(window_20)
+        metrics["high_20d"] = high_20d
+        if high_20d > 0:
+            metrics["high_20d_ratio"] = last / high_20d
+            metrics["distance_from_20d_high_pct"] = ((last / high_20d) - 1.0) * 100.0
+
+    return metrics
+
+
+
 def fetch_usd_jpy() -> float:
     last, _ = fetch_last_and_change("JPY=X")
     if last is None:
@@ -268,6 +353,7 @@ def fetch_market_data():
 
     for item in WATCHLIST:
         ticker = item["ticker"]
+        daily_metrics = {}
         daily_last = None
         daily_change = None
         intraday_last = None
@@ -275,7 +361,9 @@ def fetch_market_data():
         error = None
 
         try:
-            daily_last, daily_change = fetch_last_and_change(ticker)
+            daily_metrics = fetch_daily_metrics(ticker)
+            daily_last = daily_metrics.get("last")
+            daily_change = daily_metrics.get("pct_change")
             intraday_last, change_15m = fetch_intraday_change(ticker)
         except Exception as exc:
             error = str(exc)[:120]
@@ -295,6 +383,12 @@ def fetch_market_data():
                 "last_jpy": last_jpy,
                 "pct_change": daily_change,
                 "change_15m": change_15m,
+                "change_5d": daily_metrics.get("change_5d"),
+                "change_10d": daily_metrics.get("change_10d"),
+                "change_20d": daily_metrics.get("change_20d"),
+                "high_20d": daily_metrics.get("high_20d"),
+                "high_20d_ratio": daily_metrics.get("high_20d_ratio"),
+                "distance_from_20d_high_pct": daily_metrics.get("distance_from_20d_high_pct"),
                 "error": error,
             }
         )
@@ -417,6 +511,8 @@ def migrate_state(state):
             pos["peak_pnl_pct"] = max(peak_pnl_candidates)
 
         pos.setdefault("partial_taken_20", False)
+        pos.setdefault("partial_taken_rebound", False)
+        pos.setdefault("buy_mode", pos.get("buy_mode", "legacy"))
         pos.setdefault("strategy_version", STRATEGY_VERSION)
 
     return state
@@ -489,6 +585,8 @@ def refresh_positions(positions, market_map):
         new_pos["drawdown_from_peak_pct"] = drawdown_from_peak_pct
         new_pos["break_even_stop_jpy"] = break_even_stop_jpy
         new_pos.setdefault("partial_taken_20", False)
+        new_pos.setdefault("partial_taken_rebound", False)
+        new_pos.setdefault("buy_mode", pos.get("buy_mode", "legacy"))
         new_pos["strategy_version"] = STRATEGY_VERSION
 
         refreshed.append(new_pos)
@@ -562,6 +660,34 @@ def decide_sell_action(pos, row):
     drawdown = safe_float(pos.get("drawdown_from_peak_pct")) or 0.0
     current_price = safe_float(pos.get("current_price_jpy"))
     break_even_stop = safe_float(pos.get("break_even_stop_jpy"))
+    is_rebound_trade = pos.get("buy_mode") == "oversold_rebound" or bool(pos.get("rebound_trade", False))
+
+    if is_rebound_trade and pnl_pct <= REBOUND_STOP_LOSS_PCT:
+        return {
+            "type": "sell_all",
+            "action": "paper_rebound_stop_loss",
+            "reason": f"反発狙いの撤退: 損切りライン到達 {ticker} {pct(pnl_pct)}",
+        }
+
+    if is_rebound_trade and peak_pnl_pct >= REBOUND_TRAILING_START_PCT and drawdown <= REBOUND_TRAILING_DRAWDOWN_PCT:
+        return {
+            "type": "sell_all",
+            "action": "paper_rebound_trailing_stop",
+            "reason": f"反発狙いの利益保護: ピーク利益 {pct(peak_pnl_pct)} から {pct(drawdown)} 下落",
+        }
+
+    if (
+        is_rebound_trade
+        and pnl_pct >= REBOUND_TAKE_PROFIT_PCT
+        and int(pos.get("qty", 0)) >= 2
+        and not bool(pos.get("partial_taken_rebound", False))
+    ):
+        return {
+            "type": "sell_partial",
+            "action": "paper_rebound_take_profit",
+            "partial_flag": "partial_taken_rebound",
+            "reason": f"反発狙いの一部利確: 含み益が {pct(REBOUND_TAKE_PROFIT_PCT)} 以上",
+        }
 
     if change_15m is not None and change_15m <= ALERT_15M_DROP_PCT:
         return {
@@ -606,6 +732,7 @@ def decide_sell_action(pos, row):
         return {
             "type": "sell_partial",
             "action": "paper_take_profit",
+            "partial_flag": "partial_taken_20",
             "reason": f"一部利確: 含み益が {pct(PARTIAL_TAKE_PROFIT_PCT)} 以上",
         }
 
@@ -736,6 +863,100 @@ def is_sector_overheated(row, sector_info):
     return False
 
 
+def is_memory_storage_row(row):
+    ticker = row.get("ticker")
+    theme = row.get("theme", "")
+    return ticker in {"SNDK", "285A.T", "MU", "WDC", "STX"} or theme in {"メモリ・ストレージ", "メモリ", "ストレージ"}
+
+
+def is_week_open_risk(row, current):
+    """週初の寄り付き直後を高値追い禁止時間として扱う。
+
+    JPY銘柄: 月曜 9:00-10:30 JST
+    USD銘柄: 米国月曜寄り後をJST月曜 22:30-24:00前後として近似
+    """
+    currency = row.get("currency")
+    if currency == "JPY":
+        if current.weekday() != 0:
+            return False
+        minutes = current.hour * 60 + current.minute
+        return 9 * 60 <= minutes < 9 * 60 + JP_WEEK_OPEN_BUY_BLOCK_MINUTES
+
+    if currency == "USD":
+        # 米国夏時間の月曜寄り付き 9:30 ET = 月曜22:30 JSTを基準にする。
+        # 冬時間では23:30 JST寄り付きなので、22:30-翌0:30を広めにブロックする。
+        if current.weekday() == 0:
+            minutes = current.hour * 60 + current.minute
+            return 22 * 60 + 30 <= minutes < 24 * 60
+        if current.weekday() == 1:
+            minutes = current.hour * 60 + current.minute
+            return 0 <= minutes < 30
+    return False
+
+
+def is_week_open_first_hour(row, current):
+    currency = row.get("currency")
+    if currency == "JPY":
+        if current.weekday() != 0:
+            return False
+        minutes = current.hour * 60 + current.minute
+        return 9 * 60 <= minutes < 10 * 60
+
+    if currency == "USD":
+        if current.weekday() == 0:
+            minutes = current.hour * 60 + current.minute
+            return 22 * 60 + 30 <= minutes < 23 * 60 + 30
+        if current.weekday() == 1:
+            minutes = current.hour * 60 + current.minute
+            return 0 <= minutes < 30
+    return False
+
+
+def is_short_term_overheated(row):
+    """高値掴みになりやすい短期過熱を検出する。"""
+    c5 = safe_float(row.get("change_5d"))
+    c10 = safe_float(row.get("change_10d"))
+    c20 = safe_float(row.get("change_20d"))
+    high_ratio = safe_float(row.get("high_20d_ratio"))
+    daily = safe_float(row.get("pct_change"))
+    is_memory = is_memory_storage_row(row)
+
+    reasons = []
+    if is_memory:
+        if c5 is not None and c5 >= MEMORY_OVERHEAT_5D_PCT:
+            reasons.append(f"メモリ系5日上昇率が高い: {pct(c5)}")
+        if c20 is not None and c20 >= MEMORY_OVERHEAT_20D_PCT:
+            reasons.append(f"メモリ系20日上昇率が高い: {pct(c20)}")
+        if high_ratio is not None and high_ratio >= MEMORY_NEAR_20D_HIGH_RATIO and daily is not None and daily > 0:
+            reasons.append(f"メモリ系20日高値圏: 高値比{pct((high_ratio - 1.0) * 100)}")
+    else:
+        if c5 is not None and c5 >= OVERHEAT_5D_PCT:
+            reasons.append(f"5日上昇率が高い: {pct(c5)}")
+        if c10 is not None and c10 >= OVERHEAT_10D_PCT:
+            reasons.append(f"10日上昇率が高い: {pct(c10)}")
+        if c20 is not None and c20 >= OVERHEAT_20D_PCT:
+            reasons.append(f"20日上昇率が高い: {pct(c20)}")
+        if high_ratio is not None and high_ratio >= NEAR_20D_HIGH_RATIO and daily is not None and daily > 0:
+            reasons.append(f"20日高値圏: 高値比{pct((high_ratio - 1.0) * 100)}")
+
+    return bool(reasons), "; ".join(reasons[:3])
+
+
+def has_oversold_history(row):
+    c5 = safe_float(row.get("change_5d"))
+    c10 = safe_float(row.get("change_10d"))
+    c20 = safe_float(row.get("change_20d"))
+    return (c5 is not None and c5 <= OVERSOLD_5D_PCT) or (c10 is not None and c10 <= OVERSOLD_10D_PCT) or (c20 is not None and c20 <= OVERSOLD_20D_PCT)
+
+
+def count_r_grade_rebound_positions(positions):
+    count = 0
+    for pos in positions:
+        if pos.get("buy_mode") == "oversold_rebound" and (pos.get("grade") == "R" or TICKER_GRADES.get(pos.get("ticker"), "B") == "R"):
+            count += 1
+    return count
+
+
 def portfolio_cash_ratio(portfolio):
     cash = int(portfolio.get("cash", 0))
     total_value = int(portfolio.get("total_value", STARTING_CAPITAL))
@@ -812,13 +1033,58 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     cash_ratio = portfolio_cash_ratio(portfolio)
     recovered = sector_recovered_from_weakness(state, sector, sector_status)
     overheated = is_sector_overheated(row, sector_info)
+    short_overheated, short_overheat_reason = is_short_term_overheated(row)
+    week_open_risk = is_week_open_risk(row, current)
+    week_open_first_hour = is_week_open_first_hour(row, current)
 
     if last_jpy is None or last_jpy <= 0:
         return {"ok": False, "reason": "価格データなし"}
     if daily is None:
         return {"ok": False, "reason": "日次変化率なし"}
 
-    # 1) v4: 反発初動の再エントリー
+    # 1) v5: 売られすぎ反発の小額買い。
+    # SanDiskのようなR格付け・高ボラ銘柄でも、暴落後の反発初動だけ小さく拾う。
+    rebound_allowed = True
+    rebound_reason = []
+
+    if grade not in {"S", "A", "B", "R"}:
+        rebound_allowed = False
+        rebound_reason.append(f"反発買い対象外格付け: {grade}")
+    if not has_oversold_history(row):
+        rebound_allowed = False
+        rebound_reason.append("直近で十分に売られていない")
+    if daily < REBOUND_DAILY_MIN_PCT or daily > REBOUND_DAILY_MAX_PCT:
+        rebound_allowed = False
+        rebound_reason.append(f"反発買いの日次範囲外: {pct(daily)}")
+    if intraday is not None and intraday < REBOUND_15M_MIN_PCT:
+        rebound_allowed = False
+        rebound_reason.append(f"短期下落が止まっていない: 15分{pct(intraday)}")
+    if intraday is not None and intraday > REBOUND_15M_MAX_PCT:
+        rebound_allowed = False
+        rebound_reason.append(f"短期急騰しすぎ: 15分{pct(intraday)}")
+    if sector_status == "crash":
+        rebound_allowed = False
+        rebound_reason.append("セクターcrash中は反発買いしない")
+    if cash_ratio < REBOUND_MIN_CASH_RATIO:
+        rebound_allowed = False
+        rebound_reason.append(f"反発買いには現金不足: 現金比率{pct(cash_ratio * 100)}")
+    if week_open_first_hour:
+        rebound_allowed = False
+        rebound_reason.append("週明け寄り付き直後は反発買いも禁止")
+    if cooldown_hours > BUY_COOLDOWN_HOURS - PROBE_COOLDOWN_HOURS and grade == "R":
+        rebound_allowed = False
+        rebound_reason.append(f"R格付けは損切り直後の冷却中に買わない: 残り{cooldown_hours:.1f}時間")
+
+    if rebound_allowed:
+        return {
+            "ok": True,
+            "mode": "oversold_rebound",
+            "allocation_ratio": REBOUND_ALLOCATION_RATIO,
+            "min_cash_ratio": REBOUND_MIN_CASH_AFTER_BUY_RATIO,
+            "reason": f"v5売られすぎ反発買い: {grade}格付け / 日次{pct(daily)} / 5日{pct(row.get('change_5d'))} / 10日{pct(row.get('change_10d'))} / セクター{sector_status}",
+        }
+
+    # 2) v4: 反発初動の再エントリー
     # ポートフォリオDDが深く、現金が厚く、セクターがweak/crashからneutral/strongへ回復した場合だけ小口で戻る。
     reentry_allowed = True
     reentry_reason = []
@@ -850,6 +1116,12 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     if cooldown_hours > BUY_COOLDOWN_HOURS - REENTRY_MIN_WAIT_HOURS_AFTER_COOLDOWN:
         reentry_allowed = False
         reentry_reason.append(f"損切り直後の冷却中: 残り{cooldown_hours:.1f}時間")
+    if week_open_risk:
+        reentry_allowed = False
+        reentry_reason.append("週明け高値追い禁止時間")
+    if short_overheated:
+        reentry_allowed = False
+        reentry_reason.append(f"短期過熱: {short_overheat_reason}")
     if overheated:
         reentry_allowed = False
         reentry_reason.append("逃避先の短期過熱を検知")
@@ -870,6 +1142,12 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     if grade == "R":
         normal_allowed = False
         normal_reason.append("R格付けは通常買い禁止")
+    if week_open_risk:
+        normal_allowed = False
+        normal_reason.append("週明け高値追い禁止時間")
+    if short_overheated:
+        normal_allowed = False
+        normal_reason.append(f"短期過熱: {short_overheat_reason}")
     if sector_status in {"weak", "crash"}:
         normal_allowed = False
         normal_reason.append(f"セクター地合いが弱い: {sector_status} 平均{pct(sector_avg)}")
@@ -935,6 +1213,9 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     if sector in held_sectors:
         probe_allowed = False
         probe_reason.append("同一セクターを既に保有中のため打診買いしない")
+    if week_open_first_hour:
+        probe_allowed = False
+        probe_reason.append("週明け寄り付き直後は打診買いしない")
     if overheated:
         probe_allowed = False
         probe_reason.append("短期過熱セクターは打診買いしない")
@@ -956,6 +1237,12 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     if cash_ratio < HIGH_CASH_DEPLOY_TRIGGER_RATIO:
         high_cash_allowed = False
         high_cash_reason.append(f"現金比率が高現金モード未満: {pct(cash_ratio * 100)}")
+    if week_open_risk:
+        high_cash_allowed = False
+        high_cash_reason.append("週明け高値追い禁止時間")
+    if short_overheated:
+        high_cash_allowed = False
+        high_cash_reason.append(f"短期過熱: {short_overheat_reason}")
     if grade not in {"S", "A"}:
         high_cash_allowed = False
         high_cash_reason.append(f"高現金時の分散買い対象外格付け: {grade}")
@@ -992,7 +1279,8 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
         "reason": "通常買い不可: " + "; ".join(normal_reason[:3])
         + " / 再エントリー不可: " + "; ".join(reentry_reason[:3])
         + " / 打診買い不可: " + "; ".join(probe_reason[:2])
-        + " / 高現金買い不可: " + "; ".join(high_cash_reason[:2]),
+        + " / 高現金買い不可: " + "; ".join(high_cash_reason[:2])
+        + " / 反発買い不可: " + "; ".join(rebound_reason[:2]),
     }
 
 def update_paper_portfolio(state, market_data, current):
@@ -1056,7 +1344,7 @@ def update_paper_portfolio(state, market_data, current):
             new_pos = dict(pos)
             new_pos["qty"] = remaining_qty
             if action["type"] == "sell_partial":
-                new_pos["partial_taken_20"] = True
+                new_pos[action.get("partial_flag", "partial_taken_20")] = True
             kept_positions.append(new_pos)
 
     positions = kept_positions
@@ -1074,6 +1362,7 @@ def update_paper_portfolio(state, market_data, current):
     candidates = sorted(market_data, key=lambda row: candidate_score(row, sector_stats), reverse=True)
     reentry_buys = 0
     high_cash_buys = 0
+    oversold_rebound_buys = 0
 
     for cand in candidates:
         if len(positions) >= MAX_POSITIONS:
@@ -1092,6 +1381,11 @@ def update_paper_portfolio(state, market_data, current):
             continue
         if buy_mode == "high_cash_deploy" and high_cash_buys >= MAX_HIGH_CASH_BUYS_PER_SLOT:
             continue
+        if buy_mode == "oversold_rebound" and oversold_rebound_buys >= MAX_OVERSOLD_REBOUND_BUYS_PER_SLOT:
+            continue
+        if buy_mode == "oversold_rebound" and (cand.get("grade") == "R" or TICKER_GRADES.get(ticker, "B") == "R"):
+            if count_r_grade_rebound_positions(positions) >= MAX_R_GRADE_REBOUND_POSITIONS:
+                continue
 
         theme = cand.get("theme", "")
         sector = cand.get("sector") or broad_sector(theme)
@@ -1118,10 +1412,17 @@ def update_paper_portfolio(state, market_data, current):
         allocation = min(allocation, max_position_value)
 
         qty = int(allocation // last_jpy)
+        if qty <= 0 and buy_mode == "oversold_rebound":
+            # SanDiskのように1株単価が大きいR銘柄は、少額枠では0株になりやすい。
+            # ただし、1株でも総資産の上限内に収まる場合だけ例外的に1株を許可する。
+            if last_jpy <= total_value * REBOUND_MAX_SINGLE_POSITION_WEIGHT:
+                qty = 1
         if qty <= 0:
             continue
 
         cost = int(qty * last_jpy)
+        if buy_mode == "oversold_rebound" and cost > int(total_value * REBOUND_MAX_SINGLE_POSITION_WEIGHT):
+            continue
         if cost > cash or cash - cost < min_cash_for_buy:
             continue
 
@@ -1143,6 +1444,9 @@ def update_paper_portfolio(state, market_data, current):
             "drawdown_from_peak_pct": 0.0,
             "break_even_stop_jpy": None,
             "partial_taken_20": False,
+            "partial_taken_rebound": False,
+            "buy_mode": buy_mode,
+            "rebound_trade": buy_mode == "oversold_rebound",
             "strategy_version": STRATEGY_VERSION,
             "bought_at": current.isoformat(),
         }
@@ -1166,6 +1470,8 @@ def update_paper_portfolio(state, market_data, current):
             reentry_buys += 1
         if buy_decision.get("mode") == "high_cash_deploy":
             high_cash_buys += 1
+        if buy_decision.get("mode") == "oversold_rebound":
+            oversold_rebound_buys += 1
 
     state["cash"] = cash
     state["positions"] = positions
@@ -1297,6 +1603,12 @@ def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
             "high_cash_deploy_trigger_ratio": HIGH_CASH_DEPLOY_TRIGGER_RATIO,
             "high_cash_deploy_allocation_ratio": HIGH_CASH_DEPLOY_ALLOCATION_RATIO,
             "defense_overheat_avg_pct": DEFENSE_OVERHEAT_AVG_PCT,
+            "jp_week_open_buy_block_minutes": JP_WEEK_OPEN_BUY_BLOCK_MINUTES,
+            "overheat_5d_pct": OVERHEAT_5D_PCT,
+            "memory_overheat_5d_pct": MEMORY_OVERHEAT_5D_PCT,
+            "oversold_rebound_daily_range": [REBOUND_DAILY_MIN_PCT, REBOUND_DAILY_MAX_PCT],
+            "rebound_allocation_ratio": REBOUND_ALLOCATION_RATIO,
+            "rebound_stop_loss_pct": REBOUND_STOP_LOSS_PCT,
         },
         "outlook": build_outlook(market_data),
         "usd_jpy": usd_jpy,
@@ -1350,7 +1662,7 @@ def make_discord_message(report):
         lines.append("**保有中**")
         for pos in portfolio["positions"]:
             lines.append(
-                f"- {pos['ticker']}: {pos['qty']}株 / 評価 {yen(pos['market_value_jpy'])} / 損益 {yen(pos['pnl_jpy'])} ({pct(pos['pnl_pct'])}) / 高値比 {pct(pos.get('drawdown_from_peak_pct'))}"
+                f"- {pos['ticker']}: {pos['qty']}株 / 評価 {yen(pos['market_value_jpy'])} / 損益 {yen(pos['pnl_jpy'])} ({pct(pos['pnl_pct'])}) / 高値比 {pct(pos.get('drawdown_from_peak_pct'))} / mode {pos.get('buy_mode', '-')}"
             )
         lines.append("")
 
