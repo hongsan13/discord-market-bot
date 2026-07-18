@@ -19,7 +19,7 @@ MAX_REPORTS = 240
 DATA_PATH = Path("data/reports.json")
 DOCS_DATA_PATH = Path("docs/data/reports.json")
 
-STRATEGY_VERSION = "v5_rebound_overheat_balance"
+STRATEGY_VERSION = "v6_risk_adjusted_execution"
 
 ALERT_15M_DROP_PCT = -3.0
 ALERT_DAY_DROP_PCT = -6.0
@@ -120,6 +120,62 @@ REBOUND_STOP_LOSS_PCT = -5.0
 REBOUND_TAKE_PROFIT_PCT = 10.0
 REBOUND_TRAILING_START_PCT = 15.0
 REBOUND_TRAILING_DRAWDOWN_PCT = -6.0
+
+# v6: 実運用寄りの売買品質と資金効率を改善する。
+# 1) 同一銘柄クールダウン 2) 全買いルートへのセクタークールダウン強制
+# 3) 1日あたりの買付回数制限 4) 取引摩擦（スプレッド/約定ズレ/為替コスト）の反映
+# 5) リスクレジーム別の現金比率・保有数・投入量 6) セクター/格付け別の保有上限
+TICKER_COOLDOWN_HOURS = {
+    "paper_sell_alert": 72,
+    "paper_stop_loss": 48,
+    "paper_rebound_stop_loss": 72,
+    "paper_break_even_stop": 48,
+    "paper_trailing_stop": 24,
+    "paper_rebound_trailing_stop": 24,
+    "paper_take_profit": 12,
+    "paper_rebound_take_profit": 12,
+}
+SECTOR_COOLDOWN_SA_EXCEPTION_WAIT_HOURS = 12
+MAX_TOTAL_BUYS_PER_DAY = 3
+MAX_SAME_BUCKET_BUYS_PER_DAY = 2
+MAX_REBOUND_BUYS_PER_DAY = 1
+
+# ペーパートレードで不利な約定価格を使い、実運用の摩擦を保守的に近似する。
+# 米国株は為替コストも含めた片道の概算値。
+HIGH_VOL_TICKERS = {"SNDK", "SMCI", "285A.T", "6857.T", "6146.T"}
+MAX_EXECUTION_FRICTION_PCT = 0.45
+
+RISK_REGIME_MIN_CASH = {
+    "risk_off": 0.75,
+    "cautious": 0.60,
+    "neutral": 0.45,
+    "risk_on": 0.30,
+    "strong_risk_on": 0.20,
+}
+RISK_REGIME_MAX_POSITIONS = {
+    "risk_off": 3,
+    "cautious": 4,
+    "neutral": 5,
+    "risk_on": 5,
+    "strong_risk_on": 5,
+}
+RISK_REGIME_ALLOCATION_MULTIPLIER = {
+    "risk_off": 0.50,
+    "cautious": 0.70,
+    "neutral": 0.90,
+    "risk_on": 1.00,
+    "strong_risk_on": 1.15,
+}
+
+BUCKET_MAX_WEIGHTS = {
+    "メモリ・ストレージ": 0.18,
+    "半導体・AIインフラ": 0.35,
+    "防衛・宇宙": 0.25,
+    "データセンター周辺": 0.25,
+    "AIクラウド": 0.25,
+    "サイバーセキュリティ": 0.15,
+}
+GRADE_MAX_POSITION_WEIGHTS = {"S": 0.15, "A": 0.15, "B": 0.12, "R": 0.08}
 
 TICKER_GRADES = {
     "NVDA": "S", "TSM": "S", "ASML": "S", "MSFT": "S",
@@ -414,6 +470,7 @@ def default_state():
         "realized_trades": [],
         "portfolio_peak_value_jpy": STARTING_CAPITAL,
         "sector_cooldowns": {},
+        "ticker_cooldowns": {},
         "strategy_version": STRATEGY_VERSION,
     }
 
@@ -464,6 +521,7 @@ def migrate_state(state):
     state.setdefault("realized_pnl_jpy", 0)
     state.setdefault("realized_trades", [])
     state.setdefault("sector_cooldowns", {})
+    state.setdefault("ticker_cooldowns", {})
 
     peak_values = [STARTING_CAPITAL]
     for report in state.get("reports", []):
@@ -515,6 +573,7 @@ def migrate_state(state):
         pos.setdefault("buy_mode", pos.get("buy_mode", "legacy"))
         pos.setdefault("strategy_version", STRATEGY_VERSION)
 
+    rebuild_ticker_cooldowns_from_history(state)
     return state
 
 
@@ -625,10 +684,29 @@ def build_portfolio_snapshot(state, market_data):
     }
 
 
-def record_realized_trade(state, ticker, name, qty, sell_price_jpy, buy_price_jpy, reason, current):
+def record_realized_trade(
+    state,
+    ticker,
+    name,
+    qty,
+    sell_market_price_jpy,
+    buy_price_jpy,
+    reason,
+    current,
+    action,
+    row=None,
+):
+    friction_pct = estimate_execution_friction_pct(
+        ticker=ticker,
+        currency=(row or {}).get("currency"),
+        grade=(row or {}).get("grade") or TICKER_GRADES.get(ticker, "B"),
+    )
+    sell_price_jpy = apply_execution_friction(sell_market_price_jpy, "sell", friction_pct)
     proceeds = int(qty * sell_price_jpy)
+    reference_proceeds = int(qty * sell_market_price_jpy)
     cost = int(qty * buy_price_jpy) if buy_price_jpy else proceeds
     pnl = proceeds - cost
+    execution_cost_jpy = max(0, reference_proceeds - proceeds)
 
     state["realized_pnl_jpy"] = int(state.get("realized_pnl_jpy", 0)) + pnl
     trades = state.setdefault("realized_trades", [])
@@ -637,19 +715,22 @@ def record_realized_trade(state, ticker, name, qty, sell_price_jpy, buy_price_jp
             "ticker": ticker,
             "name": name,
             "qty": qty,
+            "sell_market_price_jpy": sell_market_price_jpy,
             "sell_price_jpy": sell_price_jpy,
             "buy_price_jpy": buy_price_jpy,
             "proceeds_jpy": proceeds,
             "cost_jpy": cost,
             "realized_pnl_jpy": pnl,
+            "execution_friction_pct": friction_pct,
+            "execution_cost_jpy": execution_cost_jpy,
+            "action": action,
             "reason": reason,
             "sold_at": current.isoformat(),
         }
     )
-    state["realized_trades"] = trades[-100:]
+    state["realized_trades"] = trades[-200:]
 
-    return proceeds, cost, pnl
-
+    return proceeds, cost, pnl, sell_price_jpy, execution_cost_jpy
 
 def decide_sell_action(pos, row):
     ticker = pos["ticker"]
@@ -989,6 +1070,252 @@ def set_sector_cooldown(state, sector, current, hours=BUY_COOLDOWN_HOURS):
     state.setdefault("sector_cooldowns", {})[sector] = (current + timedelta(hours=hours)).isoformat()
 
 
+def estimate_execution_friction_pct(ticker, currency=None, grade=None):
+    """片道のスプレッド・約定ズレ・米国株の為替摩擦を簡易的にまとめた保守的な概算。"""
+    grade = grade or TICKER_GRADES.get(ticker, "B")
+    is_usd = currency == "USD" or (currency is None and not str(ticker).endswith(".T"))
+    friction = 0.20 if is_usd else 0.10
+    if grade == "B":
+        friction += 0.05
+    elif grade == "R":
+        friction += 0.15
+    if ticker in HIGH_VOL_TICKERS:
+        friction += 0.10
+    return min(MAX_EXECUTION_FRICTION_PCT, friction)
+
+
+def apply_execution_friction(market_price_jpy, side, friction_pct):
+    price_value = safe_float(market_price_jpy)
+    if price_value is None:
+        return None
+    rate = friction_pct / 100.0
+    return price_value * (1.0 + rate if side == "buy" else 1.0 - rate)
+
+
+def infer_sell_action_from_reason(reason):
+    reason = str(reason or "")
+    if "15分変化率" in reason or "日次下落" in reason:
+        return "paper_sell_alert"
+    if "反発狙いの撤退" in reason:
+        return "paper_rebound_stop_loss"
+    if "損切りライン" in reason:
+        return "paper_stop_loss"
+    if "建値保護" in reason:
+        return "paper_break_even_stop"
+    if "反発狙いの利益保護" in reason:
+        return "paper_rebound_trailing_stop"
+    if "利益保護" in reason:
+        return "paper_trailing_stop"
+    if "反発狙いの一部利確" in reason:
+        return "paper_rebound_take_profit"
+    if "一部利確" in reason:
+        return "paper_take_profit"
+    return None
+
+
+def set_ticker_cooldown(state, ticker, current, action, sell_price_jpy=None):
+    hours = TICKER_COOLDOWN_HOURS.get(action)
+    if not hours:
+        return
+    cooldowns = state.setdefault("ticker_cooldowns", {})
+    until = current + timedelta(hours=hours)
+    existing = cooldowns.get(ticker, {})
+    existing_until = parse_dt(existing.get("until")) if isinstance(existing, dict) else parse_dt(existing)
+    if existing_until is None or until > existing_until:
+        cooldowns[ticker] = {
+            "until": until.isoformat(),
+            "action": action,
+            "sell_price_jpy": sell_price_jpy,
+            "set_at": current.isoformat(),
+        }
+
+
+def ticker_cooldown_remaining_hours(state, ticker, current):
+    cooldowns = state.setdefault("ticker_cooldowns", {})
+    item = cooldowns.get(ticker)
+    if not item:
+        return 0.0
+    until = parse_dt(item.get("until")) if isinstance(item, dict) else parse_dt(item)
+    if until is None or until <= current:
+        cooldowns.pop(ticker, None)
+        return 0.0
+    return (until - current).total_seconds() / 3600.0
+
+
+def rebuild_ticker_cooldowns_from_history(state, current=None):
+    current = current or now_jst()
+    cooldowns = state.setdefault("ticker_cooldowns", {})
+    for trade in state.get("realized_trades", []):
+        ticker = trade.get("ticker")
+        sold_at = parse_dt(trade.get("sold_at"))
+        if not ticker or sold_at is None:
+            continue
+        action = trade.get("action") or infer_sell_action_from_reason(trade.get("reason"))
+        hours = TICKER_COOLDOWN_HOURS.get(action)
+        if not hours:
+            continue
+        until = sold_at + timedelta(hours=hours)
+        if until <= current:
+            continue
+        existing = cooldowns.get(ticker, {})
+        existing_until = parse_dt(existing.get("until")) if isinstance(existing, dict) else parse_dt(existing)
+        if existing_until is None or until > existing_until:
+            cooldowns[ticker] = {
+                "until": until.isoformat(),
+                "action": action,
+                "sell_price_jpy": trade.get("sell_price_jpy"),
+                "set_at": sold_at.isoformat(),
+            }
+
+
+def exposure_bucket(theme):
+    if theme in {"メモリ・ストレージ", "ストレージ"}:
+        return "メモリ・ストレージ"
+    return broad_sector(theme)
+
+
+def bucket_exposure_value(positions, bucket):
+    return sum(
+        int(pos.get("market_value_jpy", 0))
+        for pos in positions
+        if exposure_bucket(pos.get("theme", "")) == bucket
+    )
+
+
+def get_daily_buy_stats(state, current):
+    today = current.strftime("%Y-%m-%d")
+    total = 0
+    rebound = 0
+    by_bucket = Counter()
+    for report in state.get("reports", []):
+        if report.get("date") != today:
+            continue
+        for decision in report.get("decisions", []):
+            if decision.get("action") != "paper_buy":
+                continue
+            total += 1
+            mode = decision.get("buy_mode")
+            if mode in {"oversold_rebound", "rebound_probe"}:
+                rebound += 1
+            ticker = decision.get("ticker")
+            item = next((x for x in WATCHLIST if x.get("ticker") == ticker), None)
+            if item:
+                by_bucket[exposure_bucket(item.get("theme", ""))] += 1
+    return {"total": total, "rebound": rebound, "by_bucket": by_bucket}
+
+
+def determine_risk_regime(market_data, sector_stats):
+    changes = [safe_float(row.get("pct_change")) for row in market_data]
+    changes = [x for x in changes if x is not None]
+    avg_change = sum(changes) / len(changes) if changes else 0.0
+    positive_ratio = sum(1 for x in changes if x > 0) / len(changes) if changes else 0.0
+    sharp_drop_count = sum(1 for x in changes if x <= ALERT_DAY_DROP_PCT)
+    statuses = [info.get("status") for info in sector_stats.values()]
+    crash_count = statuses.count("crash")
+    weak_count = statuses.count("weak")
+
+    if sharp_drop_count >= 4 or crash_count >= 2 or avg_change <= -3.0:
+        label = "risk_off"
+    elif sharp_drop_count >= 2 or crash_count >= 1 or weak_count >= 2 or avg_change <= -1.0:
+        label = "cautious"
+    elif positive_ratio >= 0.72 and avg_change >= 1.5 and crash_count == 0 and weak_count == 0:
+        label = "strong_risk_on"
+    elif positive_ratio >= 0.58 and avg_change >= 0.5 and crash_count == 0:
+        label = "risk_on"
+    else:
+        label = "neutral"
+
+    return {
+        "label": label,
+        "avg_change_pct": avg_change,
+        "positive_ratio": positive_ratio,
+        "sharp_drop_count": sharp_drop_count,
+        "crash_sector_count": crash_count,
+        "weak_sector_count": weak_count,
+        "min_cash_ratio": RISK_REGIME_MIN_CASH[label],
+        "max_positions": RISK_REGIME_MAX_POSITIONS[label],
+        "allocation_multiplier": RISK_REGIME_ALLOCATION_MULTIPLIER[label],
+    }
+
+
+def effective_min_cash_ratio(mode, regime_label):
+    regime_floor = RISK_REGIME_MIN_CASH.get(regime_label, 0.45)
+    mode_floor = {
+        "normal_momentum": 0.20,
+        "high_cash_deploy": 0.55,
+        "reentry_recovery": 0.55,
+        "rebound_probe": 0.60,
+        "oversold_rebound": 0.65,
+    }.get(mode, MIN_CASH_RATIO)
+    return max(regime_floor, mode_floor)
+
+
+def candidate_score_v6(row, sector_stats=None):
+    base = candidate_score(row, sector_stats)
+    if base <= -9000:
+        return base
+    change_5d = safe_float(row.get("change_5d")) or 0.0
+    change_10d = safe_float(row.get("change_10d")) or 0.0
+    distance_high = safe_float(row.get("distance_from_20d_high_pct"))
+    base += max(-10.0, min(10.0, change_5d)) * 0.15
+    base += max(-15.0, min(15.0, change_10d)) * 0.08
+    if distance_high is not None and -12.0 <= distance_high <= -3.0:
+        base += 1.5
+    overheated, _ = is_short_term_overheated(row)
+    if overheated:
+        base -= 6.0
+    if has_oversold_history(row) and (safe_float(row.get("pct_change")) or 0) > 0:
+        base += 2.0
+    return base
+
+
+def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_sectors, risk_regime=None):
+    """v5の判定を利用しつつ、v6のグローバルな安全弁を全買いルートへ強制する。"""
+    ticker = row.get("ticker")
+    grade = row.get("grade") or TICKER_GRADES.get(ticker, "B")
+    sector = (get_sector_status(row, sector_stats) or {}).get("sector") or broad_sector(row.get("theme", ""))
+    sector_status = (get_sector_status(row, sector_stats) or {}).get("status") or "neutral"
+    ticker_cd = ticker_cooldown_remaining_hours(state, ticker, current)
+    if ticker_cd > 0:
+        return {"ok": False, "reason": f"同一銘柄クールダウン中: 残り{ticker_cd:.1f}時間"}
+
+    sector_cd = cooldown_remaining_hours(state, sector, current)
+    if sector_cd > 0:
+        elapsed = max(0.0, BUY_COOLDOWN_HOURS - sector_cd)
+        if grade not in {"S", "A"}:
+            return {"ok": False, "reason": f"セクター冷却中はB/R格付けを全面禁止: 残り{sector_cd:.1f}時間"}
+        if elapsed < SECTOR_COOLDOWN_SA_EXCEPTION_WAIT_HOURS:
+            return {"ok": False, "reason": f"セクター冷却開始から12時間未満: 残り{sector_cd:.1f}時間"}
+        if sector_status == "crash":
+            return {"ok": False, "reason": "セクター冷却中かつcrash継続のため買い禁止"}
+
+    decision = classify_buy_candidate_v5(row, sector_stats, state, current, portfolio, held_sectors)
+    if not decision.get("ok"):
+        return decision
+
+    mode = decision.get("mode")
+    # セクター冷却中の例外はS/Aの打診・売られすぎ反発だけ。通常/再エントリー/高現金買いは全面禁止。
+    if sector_cd > 0 and mode not in {"rebound_probe", "oversold_rebound"}:
+        return {"ok": False, "reason": f"セクター冷却中は{mode}を禁止: 残り{sector_cd:.1f}時間"}
+
+    regime = (risk_regime or {}).get("label", "neutral")
+    if regime == "risk_off":
+        if mode not in {"rebound_probe", "oversold_rebound"} or grade not in {"S", "A"}:
+            return {"ok": False, "reason": "Risk-off中はS/Aの小額打診・反発買い以外を禁止"}
+    if regime == "cautious" and mode == "high_cash_deploy":
+        return {"ok": False, "reason": "Cautious中は高現金モードの機械的な買い増しを停止"}
+
+    multiplier = RISK_REGIME_ALLOCATION_MULTIPLIER.get(regime, 0.90)
+    if sector_cd > 0:
+        multiplier *= 0.50
+    decision["allocation_ratio"] = decision.get("allocation_ratio", BUY_ALLOCATION_RATIO) * multiplier
+    decision["min_cash_ratio"] = effective_min_cash_ratio(mode, regime)
+    decision["risk_regime"] = regime
+    decision["candidate_score"] = candidate_score_v6(row, sector_stats)
+    decision["reason"] = f"{decision.get('reason', '')} / v6 regime={regime}"
+    return decision
+
+
 def candidate_score(row, sector_stats=None):
     daily = safe_float(row.get("pct_change"))
     intraday = safe_float(row.get("change_15m"))
@@ -1018,7 +1345,7 @@ def candidate_score(row, sector_stats=None):
     return score
 
 
-def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_sectors):
+def classify_buy_candidate_v5(row, sector_stats, state, current, portfolio, held_sectors):
     ticker = row.get("ticker")
     grade = row.get("grade") or TICKER_GRADES.get(ticker, "B")
     daily = safe_float(row.get("pct_change"))
@@ -1288,40 +1615,34 @@ def update_paper_portfolio(state, market_data, current):
     cash = int(state.get("cash", STARTING_CAPITAL))
     positions = refresh_positions(state.get("positions", []), market_map)
     decisions = []
+    sold_tickers = set()
 
+    # 売却フェーズ。売った銘柄は同一実行内で絶対に買い戻さない。
     kept_positions = []
-
     for pos in positions:
         ticker = pos["ticker"]
         row = market_map.get(ticker, {})
         current_price = safe_float(pos.get("current_price_jpy"))
         buy_price = safe_float(pos.get("buy_price_jpy"))
         qty = int(pos.get("qty", 0))
-
         action = decide_sell_action(pos, row)
 
-        if action is None:
+        if action is None or current_price is None or buy_price is None or qty <= 0:
             kept_positions.append(pos)
             continue
 
-        if current_price is None or buy_price is None or qty <= 0:
-            kept_positions.append(pos)
-            continue
-
-        if action["type"] == "sell_all":
-            sell_qty = qty
-        else:
-            sell_qty = max(1, qty // 2)
-
-        proceeds, _, realized_pnl = record_realized_trade(
+        sell_qty = qty if action["type"] == "sell_all" else max(1, qty // 2)
+        proceeds, _, realized_pnl, execution_sell_price, execution_cost_jpy = record_realized_trade(
             state=state,
             ticker=ticker,
             name=pos.get("name", ticker),
             qty=sell_qty,
-            sell_price_jpy=current_price,
+            sell_market_price_jpy=current_price,
             buy_price_jpy=buy_price,
             reason=action["reason"],
             current=current,
+            action=action["action"],
+            row=row,
         )
         cash += proceeds
 
@@ -1332,11 +1653,17 @@ def update_paper_portfolio(state, market_data, current):
                 "qty": sell_qty,
                 "amount_jpy": proceeds,
                 "realized_pnl_jpy": realized_pnl,
+                "execution_sell_price_jpy": execution_sell_price,
+                "execution_cost_jpy": execution_cost_jpy,
                 "reason": action["reason"],
             }
         )
 
-        if action["action"] in {"paper_sell_alert", "paper_stop_loss"}:
+        if action["type"] == "sell_all":
+            sold_tickers.add(ticker)
+            set_ticker_cooldown(state, ticker, current, action["action"], execution_sell_price)
+
+        if action["action"] in {"paper_sell_alert", "paper_stop_loss", "paper_rebound_stop_loss"}:
             set_sector_cooldown(state, broad_sector(pos.get("theme", "")), current)
 
         remaining_qty = qty - sell_qty
@@ -1354,34 +1681,49 @@ def update_paper_portfolio(state, market_data, current):
 
     held = {pos["ticker"] for pos in positions}
     counts = theme_counts(positions)
-    total_value = portfolio_before_buy["total_value"]
-    min_cash = int(total_value * MIN_CASH_RATIO)
-
     sector_stats = analyze_sectors(market_data)
     held_sectors = sector_counts(positions)
-    candidates = sorted(market_data, key=lambda row: candidate_score(row, sector_stats), reverse=True)
-    reentry_buys = 0
-    high_cash_buys = 0
-    oversold_rebound_buys = 0
+    risk_regime = determine_risk_regime(market_data, sector_stats)
+    total_value = portfolio_before_buy["total_value"]
+
+    daily_stats = get_daily_buy_stats(state, current)
+    total_buys_today = daily_stats["total"]
+    rebound_buys_today = daily_stats["rebound"]
+    bucket_buys_today = Counter(daily_stats["by_bucket"])
+
+    candidates = sorted(market_data, key=lambda row: candidate_score_v6(row, sector_stats), reverse=True)
+    slot_reentry_buys = 0
+    slot_high_cash_buys = 0
+    slot_oversold_rebound_buys = 0
 
     for cand in candidates:
-        if len(positions) >= MAX_POSITIONS:
+        max_positions_for_regime = risk_regime.get("max_positions", MAX_POSITIONS)
+        if len(positions) >= min(MAX_POSITIONS, max_positions_for_regime):
+            break
+        if total_buys_today >= MAX_TOTAL_BUYS_PER_DAY:
             break
 
         ticker = cand["ticker"]
-        if ticker in held:
+        if ticker in held or ticker in sold_tickers:
+            continue
+        if ticker_cooldown_remaining_hours(state, ticker, current) > 0:
             continue
 
-        buy_decision = classify_buy_candidate(cand, sector_stats, state, current, portfolio_before_buy, held_sectors)
+        buy_decision = classify_buy_candidate(
+            cand, sector_stats, state, current, portfolio_before_buy, held_sectors, risk_regime=risk_regime
+        )
         if not buy_decision.get("ok"):
             continue
 
         buy_mode = buy_decision.get("mode")
-        if buy_mode == "reentry_recovery" and reentry_buys >= MAX_REENTRY_BUYS_PER_SLOT:
+        is_rebound_mode = buy_mode in {"oversold_rebound", "rebound_probe"}
+        if buy_mode == "reentry_recovery" and slot_reentry_buys >= MAX_REENTRY_BUYS_PER_SLOT:
             continue
-        if buy_mode == "high_cash_deploy" and high_cash_buys >= MAX_HIGH_CASH_BUYS_PER_SLOT:
+        if buy_mode == "high_cash_deploy" and slot_high_cash_buys >= MAX_HIGH_CASH_BUYS_PER_SLOT:
             continue
-        if buy_mode == "oversold_rebound" and oversold_rebound_buys >= MAX_OVERSOLD_REBOUND_BUYS_PER_SLOT:
+        if buy_mode == "oversold_rebound" and slot_oversold_rebound_buys >= MAX_OVERSOLD_REBOUND_BUYS_PER_SLOT:
+            continue
+        if is_rebound_mode and rebound_buys_today >= MAX_REBOUND_BUYS_PER_DAY:
             continue
         if buy_mode == "oversold_rebound" and (cand.get("grade") == "R" or TICKER_GRADES.get(ticker, "B") == "R"):
             if count_r_grade_rebound_positions(positions) >= MAX_R_GRADE_REBOUND_POSITIONS:
@@ -1389,17 +1731,30 @@ def update_paper_portfolio(state, market_data, current):
 
         theme = cand.get("theme", "")
         sector = cand.get("sector") or broad_sector(theme)
+        bucket = exposure_bucket(theme)
         if counts[theme] >= MAX_THEME_POSITIONS:
             continue
-
-        last_jpy = safe_float(cand.get("last_jpy"))
-        if last_jpy is None or last_jpy <= 0:
+        if bucket_buys_today[bucket] >= MAX_SAME_BUCKET_BUYS_PER_DAY:
             continue
 
-        min_cash_for_buy = int(total_value * buy_decision.get("min_cash_ratio", MIN_CASH_RATIO))
+        market_price = safe_float(cand.get("last_jpy"))
+        if market_price is None or market_price <= 0:
+            continue
+
+        friction_pct = estimate_execution_friction_pct(
+            ticker=ticker,
+            currency=cand.get("currency"),
+            grade=cand.get("grade") or TICKER_GRADES.get(ticker, "B"),
+        )
+        execution_buy_price = apply_execution_friction(market_price, "buy", friction_pct)
+        if execution_buy_price is None:
+            continue
+
+        min_cash_ratio = buy_decision.get("min_cash_ratio", MIN_CASH_RATIO)
+        min_cash_for_buy = int(total_value * min_cash_ratio)
         available_cash = cash - min_cash_for_buy
         if available_cash <= 0:
-            break
+            continue
 
         allocation_ratio = buy_decision.get("allocation_ratio", BUY_ALLOCATION_RATIO)
         allocation = min(
@@ -1408,38 +1763,41 @@ def update_paper_portfolio(state, market_data, current):
             int(available_cash),
         )
 
-        max_position_value = int(total_value * MAX_POSITION_WEIGHT)
-        allocation = min(allocation, max_position_value)
+        grade = cand.get("grade") or TICKER_GRADES.get(ticker, "B")
+        grade_cap = GRADE_MAX_POSITION_WEIGHTS.get(grade, MAX_POSITION_WEIGHT)
+        allocation = min(allocation, int(total_value * min(MAX_POSITION_WEIGHT, grade_cap)))
 
-        qty = int(allocation // last_jpy)
-        if qty <= 0 and buy_mode == "oversold_rebound":
-            # SanDiskのように1株単価が大きいR銘柄は、少額枠では0株になりやすい。
-            # ただし、1株でも総資産の上限内に収まる場合だけ例外的に1株を許可する。
-            if last_jpy <= total_value * REBOUND_MAX_SINGLE_POSITION_WEIGHT:
-                qty = 1
+        qty = int(allocation // execution_buy_price)
         if qty <= 0:
+            # 1株単価が高すぎて格付け別上限を超える銘柄は、実運用リスクが大きいため見送る。
             continue
 
-        cost = int(qty * last_jpy)
-        if buy_mode == "oversold_rebound" and cost > int(total_value * REBOUND_MAX_SINGLE_POSITION_WEIGHT):
-            continue
+        cost = int(qty * execution_buy_price)
         if cost > cash or cash - cost < min_cash_for_buy:
+            continue
+
+        # セクター/テーマの集中を新規買い時点で制限する。
+        bucket_cap = BUCKET_MAX_WEIGHTS.get(bucket, 0.25)
+        current_bucket_value = bucket_exposure_value(positions, bucket)
+        if current_bucket_value + cost > int(total_value * bucket_cap):
             continue
 
         cash -= cost
         position = {
             "ticker": ticker,
             "name": cand["name"],
-            "theme": cand.get("theme", ""),
+            "theme": theme,
             "sector": sector,
-            "grade": cand.get("grade") or TICKER_GRADES.get(ticker, "B"),
+            "grade": grade,
             "qty": qty,
-            "buy_price_jpy": last_jpy,
-            "current_price_jpy": last_jpy,
-            "market_value_jpy": cost,
-            "pnl_jpy": 0,
-            "pnl_pct": 0.0,
-            "peak_price_jpy": last_jpy,
+            "buy_market_price_jpy": market_price,
+            "buy_price_jpy": execution_buy_price,
+            "current_price_jpy": market_price,
+            "market_value_jpy": int(qty * market_price),
+            "pnl_jpy": int(qty * market_price) - cost,
+            "pnl_pct": ((market_price / execution_buy_price) - 1.0) * 100.0,
+            "execution_friction_pct": friction_pct,
+            "peak_price_jpy": market_price,
             "peak_pnl_pct": 0.0,
             "drawdown_from_peak_pct": 0.0,
             "break_even_stop_jpy": None,
@@ -1455,28 +1813,43 @@ def update_paper_portfolio(state, market_data, current):
         counts[theme] += 1
         held_sectors[sector] += 1
 
+        execution_cost_jpy = max(0, cost - int(qty * market_price))
         decisions.append(
             {
                 "action": "paper_buy",
                 "ticker": ticker,
                 "qty": qty,
                 "amount_jpy": cost,
-                "buy_mode": buy_decision.get("mode"),
+                "market_amount_jpy": int(qty * market_price),
+                "execution_cost_jpy": execution_cost_jpy,
+                "execution_friction_pct": friction_pct,
+                "buy_mode": buy_mode,
+                "candidate_score": buy_decision.get("candidate_score"),
+                "risk_regime": risk_regime.get("label"),
                 "reason": buy_decision.get("reason"),
             }
         )
 
-        if buy_decision.get("mode") == "reentry_recovery":
-            reentry_buys += 1
-        if buy_decision.get("mode") == "high_cash_deploy":
-            high_cash_buys += 1
-        if buy_decision.get("mode") == "oversold_rebound":
-            oversold_rebound_buys += 1
+        total_buys_today += 1
+        bucket_buys_today[bucket] += 1
+        if is_rebound_mode:
+            rebound_buys_today += 1
+        if buy_mode == "reentry_recovery":
+            slot_reentry_buys += 1
+        elif buy_mode == "high_cash_deploy":
+            slot_high_cash_buys += 1
+        elif buy_mode == "oversold_rebound":
+            slot_oversold_rebound_buys += 1
+
+        # 同一スロット内でも最新の現金比率・保有比率を次候補に反映する。
+        state["cash"] = cash
+        state["positions"] = positions
+        portfolio_before_buy = build_portfolio_snapshot(state, market_data)
 
     state["cash"] = cash
     state["positions"] = positions
-
     portfolio = build_portfolio_snapshot(state, market_data)
+    portfolio["risk_regime"] = risk_regime
 
     if not decisions:
         decisions.append(
@@ -1485,12 +1858,12 @@ def update_paper_portfolio(state, market_data, current):
                 "ticker": "-",
                 "qty": 0,
                 "amount_jpy": 0,
-                "reason": "売買条件を満たす銘柄なし。利益保護ルールを維持して保有継続。",
+                "risk_regime": risk_regime.get("label"),
+                "reason": "売買条件を満たす銘柄なし。v6のクールダウン・集中制限・資金配分規則を維持して保有継続。",
             }
         )
 
     return portfolio, decisions
-
 
 def detect_alerts(state, market_data, current):
     last_alerts = state.setdefault("last_alerts", {})
@@ -1579,6 +1952,8 @@ def build_outlook(market_data):
 
 
 def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
+    sector_summary = analyze_sectors(market_data)
+    risk_regime = determine_risk_regime(market_data, sector_summary)
     return {
         "date": current.strftime("%Y-%m-%d"),
         "time": current.strftime("%H:%M:%S"),
@@ -1609,11 +1984,18 @@ def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
             "oversold_rebound_daily_range": [REBOUND_DAILY_MIN_PCT, REBOUND_DAILY_MAX_PCT],
             "rebound_allocation_ratio": REBOUND_ALLOCATION_RATIO,
             "rebound_stop_loss_pct": REBOUND_STOP_LOSS_PCT,
+            "ticker_cooldown_hours": TICKER_COOLDOWN_HOURS,
+            "max_total_buys_per_day": MAX_TOTAL_BUYS_PER_DAY,
+            "max_same_bucket_buys_per_day": MAX_SAME_BUCKET_BUYS_PER_DAY,
+            "max_rebound_buys_per_day": MAX_REBOUND_BUYS_PER_DAY,
+            "risk_regime_min_cash": RISK_REGIME_MIN_CASH,
+            "bucket_max_weights": BUCKET_MAX_WEIGHTS,
         },
         "outlook": build_outlook(market_data),
+        "risk_regime": risk_regime,
         "usd_jpy": usd_jpy,
         "market_data": market_data,
-        "sector_summary": analyze_sectors(market_data),
+        "sector_summary": sector_summary,
         "portfolio": portfolio,
         "decisions": decisions,
     }
@@ -1638,6 +2020,7 @@ def make_discord_message(report):
     lines.append("**Daily Discord Market Report**")
     lines.append(f"{report['date']} {report['time']} JST")
     lines.append(f"Strategy: {report.get('strategy_version', '-')}")
+    lines.append(f"Risk regime: {report.get('risk_regime', {}).get('label', '-')}")
     lines.append("")
     lines.append(f"**翌営業日方向感**: {outlook.get('label', '-')}")
     lines.append(f"- 理由: {outlook.get('reason', '-')}")
