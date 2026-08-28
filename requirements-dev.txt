@@ -1,0 +1,6 @@
+# Tested direct dependencies for local development only.
+# Production requirements.txt and Actions remain unchanged.
+-r requirements.txt
+requests==2.34.2
+yfinance==1.7.0
+reportlab==4.5.1
