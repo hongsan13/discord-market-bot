@@ -19,7 +19,13 @@ MAX_REPORTS = 240
 DATA_PATH = Path("data/reports.json")
 DOCS_DATA_PATH = Path("docs/data/reports.json")
 
-STRATEGY_VERSION = "v6_risk_adjusted_execution"
+STRATEGY_VERSION = "v7_scale_in_profit_guard"
+
+# Each holding may add at most three tranches, at least 24 hours apart.
+SCALE_IN_RATIOS = (0.03, 0.03, 0.04)
+SCALE_IN_MIN_PNL = (2.0, 4.0, 6.0)
+SCALE_IN_INTERVAL_HOURS = 24
+INTERMEDIATE_PROFIT_GUARDS = {"B": (6.0, -5.0), "S": (8.0, -6.0), "A": (8.0, -6.0)}
 
 ALERT_15M_DROP_PCT = -3.0
 ALERT_DAY_DROP_PCT = -6.0
@@ -133,6 +139,8 @@ TICKER_COOLDOWN_HOURS = {
     "paper_trailing_stop": 24,
     "paper_rebound_trailing_stop": 24,
     "paper_take_profit": 12,
+    "paper_intermediate_take_profit": 12,
+    "paper_intermediate_profit_stop": 24,
     "paper_rebound_take_profit": 12,
 }
 SECTOR_COOLDOWN_SA_EXCEPTION_WAIT_HOURS = 12
@@ -477,12 +485,21 @@ def default_state():
 
 def infer_peaks_from_reports(state):
     peaks = {}
+    # Do not import peaks from an earlier holding or a pre-scale-in cost basis.
+    starts = {
+        pos.get("ticker"): parse_dt(pos.get("peak_basis_at") or pos.get("bought_at"))
+        for pos in state.get("positions", [])
+    }
 
     for report in state.get("reports", []):
         portfolio = report.get("portfolio", {})
         for pos in portfolio.get("positions", []):
             ticker = pos.get("ticker")
             if not ticker:
+                continue
+            start = starts.get(ticker)
+            reported_at = parse_dt(report.get("generated_at"))
+            if start is not None and (reported_at is None or reported_at < start):
                 continue
 
             current_price = safe_float(pos.get("current_price_jpy"))
@@ -528,7 +545,7 @@ def migrate_state(state):
         value = safe_float(report.get("portfolio", {}).get("total_value"))
         if value is not None:
             peak_values.append(value)
-    latest_value = safe_float(state.get("latest", {}).get("portfolio", {}).get("total_value"))
+    latest_value = safe_float((state.get("latest") or {}).get("portfolio", {}).get("total_value"))
     if latest_value is not None:
         peak_values.append(latest_value)
     existing_peak = safe_float(state.get("portfolio_peak_value_jpy"))
@@ -568,6 +585,11 @@ def migrate_state(state):
         if peak_pnl_candidates:
             pos["peak_pnl_pct"] = max(peak_pnl_candidates)
 
+        if pos.get("peak_basis_at") and buy_price and pos.get("peak_price_jpy"):
+            pos["peak_pnl_pct"] = (pos["peak_price_jpy"] / buy_price - 1.0) * 100.0
+        pos.setdefault("scale_in_count", 0)
+        pos.setdefault("last_scale_in_at", None)
+        pos.setdefault("partial_taken_intermediate", False)
         pos.setdefault("partial_taken_20", False)
         pos.setdefault("partial_taken_rebound", False)
         pos.setdefault("buy_mode", pos.get("buy_mode", "legacy"))
@@ -581,10 +603,8 @@ def load_state():
     if not DATA_PATH.exists():
         return default_state()
 
-    try:
-        state = json.loads(DATA_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return default_state()
+    # Invalid existing state must fail closed, never silently reset the portfolio.
+    state = json.loads(DATA_PATH.read_text(encoding="utf-8"))
 
     return migrate_state(state)
 
@@ -626,6 +646,9 @@ def refresh_positions(positions, market_map):
         if previous_peak_pnl is not None:
             peak_pnl_pct = max(previous_peak_pnl, pnl_pct)
 
+        if pos.get("peak_basis_at") and buy_price_jpy:
+            peak_pnl_pct = (peak_price_jpy / buy_price_jpy - 1.0) * 100.0
+
         drawdown_from_peak_pct = 0.0
         if peak_price_jpy and peak_price_jpy > 0:
             drawdown_from_peak_pct = ((current_price_jpy / peak_price_jpy) - 1.0) * 100.0
@@ -634,7 +657,13 @@ def refresh_positions(positions, market_map):
         if buy_price_jpy is not None and peak_pnl_pct >= BREAK_EVEN_START_PCT:
             break_even_stop_jpy = buy_price_jpy * (1.0 + BREAK_EVEN_BUFFER_PCT / 100.0)
 
+        if pos.get("peak_basis_at") and pos.get("break_even_stop_jpy"):
+            break_even_stop_jpy = max(break_even_stop_jpy or 0, pos["break_even_stop_jpy"])
+
         new_pos = dict(pos)
+        new_pos.setdefault("scale_in_count", 0)
+        new_pos.setdefault("last_scale_in_at", None)
+        new_pos.setdefault("partial_taken_intermediate", False)
         new_pos["current_price_jpy"] = current_price_jpy
         new_pos["market_value_jpy"] = market_value_jpy
         new_pos["pnl_jpy"] = pnl_jpy
@@ -728,7 +757,7 @@ def record_realized_trade(
             "sold_at": current.isoformat(),
         }
     )
-    state["realized_trades"] = trades[-200:]
+    state["realized_trades"] = trades
 
     return proceeds, cost, pnl, sell_price_jpy, execution_cost_jpy
 
@@ -815,6 +844,24 @@ def decide_sell_action(pos, row):
             "action": "paper_take_profit",
             "partial_flag": "partial_taken_20",
             "reason": f"一部利確: 含み益が {pct(PARTIAL_TAKE_PROFIT_PCT)} 以上",
+        }
+
+    grade = pos.get("grade") or TICKER_GRADES.get(ticker, "B")
+    guard = INTERMEDIATE_PROFIT_GUARDS.get(grade)
+    # Rebound holdings retain their dedicated exits. Existing v6 exits take priority.
+    if (
+        not is_rebound_trade
+        and guard is not None
+        and not pos.get("partial_taken_intermediate", False)
+        and peak_pnl_pct >= guard[0]
+        and drawdown <= guard[1]
+    ):
+        partial = int(pos.get("qty", 0)) >= 2
+        return {
+            "type": "sell_partial" if partial else "sell_all",
+            "action": "paper_intermediate_take_profit" if partial else "paper_intermediate_profit_stop",
+            "partial_flag": "partial_taken_intermediate",
+            "reason": f"v7中間利益保護: {grade} / ピーク利益 {pct(peak_pnl_pct)} / 高値比 {pct(drawdown)}",
         }
 
     return None
@@ -1610,6 +1657,67 @@ def classify_buy_candidate_v5(row, sector_stats, state, current, portfolio, held
         + " / 反発買い不可: " + "; ".join(rebound_reason[:2]),
     }
 
+def classify_scale_in(pos, row, sector_stats, state, current, risk_regime):
+    """Only add to proven S/A winners; sizing and daily limits stay in the shared loop."""
+    grade = row.get("grade") or TICKER_GRADES.get(row["ticker"], "B")
+    regime = risk_regime.get("label")
+    count = int(pos.get("scale_in_count", 0))
+    if grade not in {"S", "A"} or regime not in {"risk_on", "strong_risk_on"}:
+        return {"ok": False}
+    if count < 0 or count >= len(SCALE_IN_RATIOS):
+        return {"ok": False}
+    if pos.get("buy_mode") == "oversold_rebound" or pos.get("rebound_trade"):
+        return {"ok": False}
+    if (safe_float(pos.get("pnl_pct")) or 0.0) < SCALE_IN_MIN_PNL[count]:
+        return {"ok": False}
+    if count == 2 and regime != "strong_risk_on":
+        return {"ok": False}
+    last = parse_dt(pos.get("last_scale_in_at") or pos.get("bought_at"))
+    if last is None or current - last < timedelta(hours=SCALE_IN_INTERVAL_HOURS):
+        return {"ok": False}
+    info = get_sector_status(row, sector_stats)
+    if info.get("status") != "strong":
+        return {"ok": False}
+    if ticker_cooldown_remaining_hours(state, row["ticker"], current) > 0:
+        return {"ok": False}
+    if cooldown_remaining_hours(state, info["sector"], current) > 0:
+        return {"ok": False}
+    # Missing short-term metrics cannot establish that a holding is not overheated.
+    if any(safe_float(row.get(key)) is None for key in (
+        "change_5d", "change_10d", "change_20d", "high_20d_ratio", "pct_change", "change_15m"
+    )):
+        return {"ok": False}
+    if is_week_open_risk(row, current) or is_short_term_overheated(row)[0] or is_sector_overheated(row, info):
+        return {"ok": False}
+    if not BUY_DAILY_MIN_PCT <= row["pct_change"] <= BUY_DAILY_MAX_PCT:
+        return {"ok": False}
+    if not BUY_15M_MIN_PCT <= row["change_15m"] <= BUY_15M_MAX_PCT:
+        return {"ok": False}
+    return {
+        "ok": True,
+        "mode": "scale_in",
+        "allocation_ratio": SCALE_IN_RATIOS[count],
+        "min_cash_ratio": RISK_REGIME_MIN_CASH[regime],
+        "candidate_score": candidate_score_v6(row, sector_stats),
+        "reason": f"v7段階買い増し: {grade} / 第{count + 1}段階 / 含み益{pct(pos.get('pnl_pct'))}",
+    }
+
+
+def merge_scale_in(pos, qty, cost, market_price, current):
+    """Rebase the cost and peak P/L without rearming any one-time partial exit."""
+    old_qty = int(pos["qty"])
+    combined_qty = old_qty + qty
+    pos["buy_price_jpy"] = (old_qty * pos["buy_price_jpy"] + cost) / combined_qty
+    pos["buy_market_price_jpy"] = (
+        old_qty * (pos.get("buy_market_price_jpy") or pos["current_price_jpy"]) + qty * market_price
+    ) / combined_qty
+    pos["qty"] = combined_qty
+    pos["scale_in_count"] = int(pos.get("scale_in_count", 0)) + 1
+    pos["last_scale_in_at"] = current.isoformat()
+    pos["peak_basis_at"] = current.isoformat()
+    pos["peak_pnl_pct"] = (pos["peak_price_jpy"] / pos["buy_price_jpy"] - 1.0) * 100.0
+
+
 def update_paper_portfolio(state, market_data, current):
     market_map = {row["ticker"]: row for row in market_data}
     cash = int(state.get("cash", STARTING_CAPITAL))
@@ -1659,9 +1767,8 @@ def update_paper_portfolio(state, market_data, current):
             }
         )
 
-        if action["type"] == "sell_all":
-            sold_tickers.add(ticker)
-            set_ticker_cooldown(state, ticker, current, action["action"], execution_sell_price)
+        sold_tickers.add(ticker)
+        set_ticker_cooldown(state, ticker, current, action["action"], execution_sell_price)
 
         if action["action"] in {"paper_sell_alert", "paper_stop_loss", "paper_rebound_stop_loss"}:
             set_sector_cooldown(state, broad_sector(pos.get("theme", "")), current)
@@ -1678,6 +1785,7 @@ def update_paper_portfolio(state, market_data, current):
     state["cash"] = cash
     state["positions"] = positions
     portfolio_before_buy = build_portfolio_snapshot(state, market_data)
+    positions = state["positions"]
 
     held = {pos["ticker"] for pos in positions}
     counts = theme_counts(positions)
@@ -1698,20 +1806,24 @@ def update_paper_portfolio(state, market_data, current):
 
     for cand in candidates:
         max_positions_for_regime = risk_regime.get("max_positions", MAX_POSITIONS)
-        if len(positions) >= min(MAX_POSITIONS, max_positions_for_regime):
-            break
         if total_buys_today >= MAX_TOTAL_BUYS_PER_DAY:
             break
 
         ticker = cand["ticker"]
-        if ticker in held or ticker in sold_tickers:
+        if ticker in sold_tickers:
             continue
         if ticker_cooldown_remaining_hours(state, ticker, current) > 0:
             continue
 
-        buy_decision = classify_buy_candidate(
-            cand, sector_stats, state, current, portfolio_before_buy, held_sectors, risk_regime=risk_regime
-        )
+        existing = next((pos for pos in positions if pos["ticker"] == ticker), None)
+        if existing is not None:
+            buy_decision = classify_scale_in(existing, cand, sector_stats, state, current, risk_regime)
+        else:
+            if len(positions) >= min(MAX_POSITIONS, max_positions_for_regime):
+                continue
+            buy_decision = classify_buy_candidate(
+                cand, sector_stats, state, current, portfolio_before_buy, held_sectors, risk_regime=risk_regime
+            )
         if not buy_decision.get("ok"):
             continue
 
@@ -1732,7 +1844,7 @@ def update_paper_portfolio(state, market_data, current):
         theme = cand.get("theme", "")
         sector = cand.get("sector") or broad_sector(theme)
         bucket = exposure_bucket(theme)
-        if counts[theme] >= MAX_THEME_POSITIONS:
+        if existing is None and counts[theme] >= MAX_THEME_POSITIONS:
             continue
         if bucket_buys_today[bucket] >= MAX_SAME_BUCKET_BUYS_PER_DAY:
             continue
@@ -1765,7 +1877,9 @@ def update_paper_portfolio(state, market_data, current):
 
         grade = cand.get("grade") or TICKER_GRADES.get(ticker, "B")
         grade_cap = GRADE_MAX_POSITION_WEIGHTS.get(grade, MAX_POSITION_WEIGHT)
-        allocation = min(allocation, int(total_value * min(MAX_POSITION_WEIGHT, grade_cap)))
+        position_cap = min(MAX_POSITION_WEIGHT, grade_cap)
+        existing_value = int(existing.get("market_value_jpy", 0)) if existing else 0
+        allocation = min(allocation, max(0, int(total_value * position_cap) - existing_value))
 
         qty = int(allocation // execution_buy_price)
         if qty <= 0:
@@ -1781,6 +1895,16 @@ def update_paper_portfolio(state, market_data, current):
         current_bucket_value = bucket_exposure_value(positions, bucket)
         if current_bucket_value + cost > int(total_value * bucket_cap):
             continue
+
+        if existing is not None:
+            # Friction reduces post-trade equity. Use that denominator for scale-in caps.
+            post_total = total_value - cost + int(qty * market_price)
+            if cash - cost < math.ceil(post_total * min_cash_ratio):
+                continue
+            if existing_value + cost > post_total * position_cap:
+                continue
+            if current_bucket_value + cost > post_total * bucket_cap:
+                continue
 
         cash -= cost
         position = {
@@ -1808,10 +1932,13 @@ def update_paper_portfolio(state, market_data, current):
             "strategy_version": STRATEGY_VERSION,
             "bought_at": current.isoformat(),
         }
-        positions.append(position)
-        held.add(ticker)
-        counts[theme] += 1
-        held_sectors[sector] += 1
+        if existing is not None:
+            merge_scale_in(existing, qty, cost, market_price, current)
+        else:
+            positions.append(position)
+            held.add(ticker)
+            counts[theme] += 1
+            held_sectors[sector] += 1
 
         execution_cost_jpy = max(0, cost - int(qty * market_price))
         decisions.append(
@@ -1845,6 +1972,8 @@ def update_paper_portfolio(state, market_data, current):
         state["cash"] = cash
         state["positions"] = positions
         portfolio_before_buy = build_portfolio_snapshot(state, market_data)
+        positions = state["positions"]
+        total_value = portfolio_before_buy["total_value"]
 
     state["cash"] = cash
     state["positions"] = positions
@@ -2005,7 +2134,7 @@ def save_state(state, report):
     state["latest"] = report
     reports = state.get("reports", [])
     reports.append(report)
-    state["reports"] = reports[-MAX_REPORTS:]
+    state["reports"] = reports
     write_state(state)
 
 
