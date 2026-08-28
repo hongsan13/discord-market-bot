@@ -1,0 +1,25 @@
+name: Development checks
+
+on:
+  pull_request:
+    paths:
+      - '**.py'
+      - 'requirements*.txt'
+      - '.github/workflows/development_checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Set up isolated development environment and run offline checks
+        run: python scripts/setup_dev.py
