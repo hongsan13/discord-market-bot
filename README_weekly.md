@@ -3,11 +3,18 @@
 ペーパートレード用の補助機能です。Bot本体、運用JSON、既存のDiscord投稿、
 GitHub Pages、既存Actionsスケジュールは変更しません。v6/v7のどちらのstateも読み取れます。
 
+## 現在の状況
+
+2026-08-29 JST確認。[PR #2](https://github.com/hongsan13/discord-market-bot/pull/2)はmainへマージ済みで、
+**Weekly market review newspaper** は有効です。確認時点では週報の実行履歴はなく、
+実際のDiscord週報配信成功は未確認です。導入済みと配信成功を区別してください。
+v7（PR #1）と開発環境整備（PR #3）もmainへ反映済みです。
+
 ## 実行の分担
 
 | 時刻（JST） | 実行場所 | 内容 |
 | --- | --- | --- |
-| 毎週土曜09:00 | このCodexタスクの定期実行 | 最新レポート・市場一次資料・不具合を分析。必要なら最小修正とテスト、専用PRを作成 |
+| 毎週土曜09:00 | ラップトップ上の既存Codexレビュー1件 | 最新レポート・市場一次資料・不具合を分析。必要なら最小修正とテスト、専用PRを作成 |
 | 毎週土曜10:00 | GitHub Actions | 最新stateとPR・週次レビューIssueを読み取り、概要と新聞PDFをDiscordへ配信 |
 
 分析結果は、タイトルが `[週次レビュー YYYY-MM-DD]` で始まるIssueに記録します。
@@ -19,16 +26,14 @@ OWNER/MEMBER/COLLABORATORによるIssueだけを週次レビューとして採�
 無人実行で承認待ちになる場合もあります。PCが停止していてもGitHub側の配信は動きますが、
 当日のAIレビューを実施できたことにはなりません。GitHubの定期実行時刻も遅延する場合があります。
 
-## 導入
+## 初回配信の確認と運用
 
-1. このPRのコード・ワークフローを確認し、ユーザーがmainへマージしてください。
-2. 既存のRepository secret `DISCORD_WEBHOOK_URL` が利用可能か確認してください。
-   値をチャットやコードへ貼り付ける必要はありません。
-3. mainのActionsから **Weekly market review newspaper** を手動実行して初回配信を確認できます。
-   手動実行は実際にDiscordへ投稿するため、初回確認時のみ明示的に実行してください。
-4. 以後は土曜10:00 JSTに配信します。自動コード修正は09:00のCodex定期タスクで行います。
+1. 土曜10:00 JSTの定期実行後、[週報Actions](https://github.com/hongsan13/discord-market-bot/actions/workflows/weekly_market_review.yml)の成否・artifactとDiscord受信を確認します。
+2. 配信には既存のRepository secret `DISCORD_WEBHOOK_URL` を使います。開発PCへのコピーや値の公開は不要です。
+3. 失敗時はログとDiscord受信状況を確認します。手動実行・再実行は実際に投稿するため、個別の明示承認が必要です。
+4. 土曜09:00のCodexレビューはラップトップの既存1件を維持します。cloneやmainへのマージで自動作成されるものではなく、デスクトップへ複製しません。
 
-mainへの直接変更・自動マージは行いません。PR1のv7が未マージなら、それを導入済みとは表示しません。
+今後の変更も専用ブランチ・PRで扱い、mainへの直接pushや未承認のマージは行いません。
 変更不要の週は理由をレビューIssueに残し、1週間の損益だけで閾値を最適化しません。
 
 ## 新聞と集計
@@ -59,16 +64,25 @@ Discord送信は確認応答付きの1回のみ。タイムアウトやサーバ
 
 ## ローカル検証（送信なし）
 
-```sh
-python -m pip install 'requests>=2.32,<3' 'reportlab>=4.2,<5'
-# Ubuntuでは sudo apt-get install fonts-ipaexfont
-python -m unittest discover -s weekly -p 'test_*.py' -v
-python -m weekly.report --state data/reports.json --output-dir weekly-output --preview
+まず[開発手順](DEVELOPMENT.md)に従って `.venv` を作成します。Windowsでは次を使います。
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_dev.py
 ```
 
-既存BotやDiscord送信をテストから呼びません。ネットワーク部はmock、PDFは一時フォルダに生成します。
-ローカルPython 3.12で62テスト成功。Python 3.11の構文互換性も確認済み。
-ActionsのPython 3.11実行と実Discord送信は、まだ検証していません。
+送信なしのPDF見本が必要な場合だけ、既存の生成物を上書きしない新しい出力先を指定します。
+
+```powershell
+.\.venv\Scripts\python.exe -m weekly.report --state data/reports.json --output-dir weekly-output/preview-01 --preview
+```
+
+このコマンドは元JSONを書き換えず、Discord送信もGitHub情報取得も行いません。
+見本の「GitHub変更情報は未取得」は正常です。日本語フォントが必要で、Windowsでは游明朝／メイリオを使用します。
+Ubuntuの週報Actionsは `fonts-ipaexfont` を導入します。
+
+テストは既存Botの運用処理や実Discord送信を呼ばず、通信をmockし、PDFを一時フォルダに生成します。
+PR #2・#3反映後のmainでPython 3.12による96テスト（週報62件を含む）が成功しました。
+開発環境整備のWindows / Python 3.11 CI成功記録はありますが、週報のUbuntu / Python 3.11本番実行・実配信は未確認です。
 
 参考: [定期タスク](https://learn.chatgpt.com/docs/automations?surface=app) /
 [Discord Webhook](https://docs.discord.com/developers/resources/webhook) /
