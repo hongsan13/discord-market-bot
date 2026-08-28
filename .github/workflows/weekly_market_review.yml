@@ -1,0 +1,72 @@
+name: Weekly market review newspaper
+
+on:
+  schedule:
+    - cron: '0 1 * * 6' # Saturday 10:00 JST (01:00 UTC); GitHub may delay scheduled runs.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: weekly-market-review-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    # Manual runs on feature/PR branches may never execute with the webhook.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install report dependencies
+        run: python -m pip install 'requests>=2.32,<3' 'reportlab>=4.2,<5'
+
+      - name: Install Japanese PDF fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-ipaexfont
+
+      - name: Test isolated weekly reporting
+        run: python -m unittest discover -s weekly -p 'test_*.py' -v
+
+      - name: Generate read-only weekly report
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python -m weekly.report
+          --state data/reports.json
+          --output-dir weekly-output
+          --repository "$GITHUB_REPOSITORY"
+          --collect-github
+
+      - name: Save newspaper and review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-market-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: weekly-output/
+          if-no-files-found: error
+          retention-days: 90
+
+      # The secret is available only to this final step, after generation/testing.
+      # Reruns can duplicate a previous successful message: inspect Discord first.
+      - name: Send summary and newspaper to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: >-
+          python -m weekly.delivery
+          --summary weekly-output/summary.txt
+          --pdf weekly-output/newspaper.pdf
