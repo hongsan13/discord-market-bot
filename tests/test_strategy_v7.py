@@ -127,9 +127,28 @@ class StrategyTests(unittest.TestCase):
         s = state()
         s["cash"] = 22000  # cash ratio is below risk_on floor
         self.assertFalse(self.buys(self.run_portfolio(s)))
-        s = state([holding(qty=1, buy_price_jpy=40000, current_price_jpy=42000,
-                                 peak_price_jpy=42000)])
-        self.assertFalse(self.buys(self.run_portfolio(s, row(last_jpy=42000))))
+        s = state([holding(qty=1, buy_price_jpy=50000, current_price_jpy=51000,
+                                 peak_price_jpy=51000)])
+        self.assertFalse(self.buys(self.run_portfolio(s, row(last_jpy=51000))))
+
+    def test_scale_in_single_share_lot_floor_stays_within_five_percent(self):
+        # Base stage 1 is 3% (30,000 JPY here), but one S-grade USD share can
+        # safely fit within the documented 5% upper edge after friction.
+        s = state([holding(qty=1, buy_price_jpy=48000, current_price_jpy=49900,
+                                 peak_price_jpy=49900)])
+        result = self.run_portfolio(s, row(last_jpy=49900))
+        buys = self.buys(result)
+        self.assertEqual(len(buys), 1)
+        self.assertEqual(buys[0]["qty"], 1)
+        self.assertGreater(buys[0]["amount_jpy"], 1_000_000 * bot.SCALE_IN_RATIOS[0])
+        self.assertLessEqual(buys[0]["amount_jpy"],
+                             1_000_000 * bot.SCALE_IN_SINGLE_SHARE_MAX_RATIO)
+
+        # One yen more in market price pushes the friction-adjusted cost above
+        # 5%; no one-share exception is allowed at that boundary.
+        s = state([holding(qty=1, buy_price_jpy=48000, current_price_jpy=49901,
+                                 peak_price_jpy=49901)])
+        self.assertFalse(self.buys(self.run_portfolio(s, row(last_jpy=49901))))
 
     def test_success_respects_post_friction_caps_and_cash(self):
         s, p, decisions = self.run_portfolio()
@@ -381,3 +400,4 @@ class StrategyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

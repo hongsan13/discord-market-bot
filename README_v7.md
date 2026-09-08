@@ -38,8 +38,9 @@ All existing v6 sell cooldown durations are retained.
 The S/A 15% holding cap, bucket caps, regime cash floors and execution friction remain.
 Scale-in caps additionally use post-friction equity. Sizing may shrink to available
 cash/holding headroom; a bucket or post-friction cap violation skips the candidate.
-No fractional shares or forced one-share exceptions are added. Consequently, a high
-share price or the other guards can still leave substantial cash uninvested.
+When the normal tranche is below one indivisible share, a scale-in may round up to one
+share only if its friction-adjusted cost is at most 5% of equity. All post-trade guards
+still apply. More expensive shares and the other guards can still leave cash uninvested.
 
 ## Intermediate protection
 
@@ -97,3 +98,4 @@ produced a 21-share intermediate partial sale of 7012.T (119 JPY realized profit
 an expected return. Strategy profitability and drawdown improvements are unproven;
 observe paper results after manual review/merge. Do not reset the state or run the
 production workflow merely to test this PR.
+

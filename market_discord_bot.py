@@ -23,6 +23,7 @@ STRATEGY_VERSION = "v7_scale_in_profit_guard"
 
 # Each holding may add at most three tranches, at least 24 hours apart.
 SCALE_IN_RATIOS = (0.03, 0.03, 0.04)
+SCALE_IN_SINGLE_SHARE_MAX_RATIO = 0.05
 SCALE_IN_MIN_PNL = (2.0, 4.0, 6.0)
 SCALE_IN_INTERVAL_HOURS = 24
 INTERMEDIATE_PROFIT_GUARDS = {"B": (6.0, -5.0), "S": (8.0, -6.0), "A": (8.0, -6.0)}
@@ -1881,6 +1882,20 @@ def update_paper_portfolio(state, market_data, current):
         existing_value = int(existing.get("market_value_jpy", 0)) if existing else 0
         allocation = min(allocation, max(0, int(total_value * position_cap) - existing_value))
 
+        # A 3% tranche can fall just below one indivisible share. For scale-ins only,
+        # allow that share when its friction-adjusted cost remains within the 5%
+        # upper edge of the strategy's intended 3-5% tranche range. Every existing
+        # cash, position and bucket check below still applies to the expanded amount.
+        if existing is not None and allocation < execution_buy_price:
+            single_share_limit = min(
+                int(total_value * SCALE_IN_SINGLE_SHARE_MAX_RATIO),
+                int(STARTING_CAPITAL * 0.15),
+                int(available_cash),
+                max(0, int(total_value * position_cap) - existing_value),
+            )
+            if math.ceil(execution_buy_price) <= single_share_limit:
+                allocation = math.ceil(execution_buy_price)
+
         qty = int(allocation // execution_buy_price)
         if qty <= 0:
             # 1株単価が高すぎて格付け別上限を超える銘柄は、実運用リスクが大きいため見送る。
@@ -2290,3 +2305,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
