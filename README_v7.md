@@ -98,4 +98,3 @@ produced a 21-share intermediate partial sale of 7012.T (119 JPY realized profit
 an expected return. Strategy profitability and drawdown improvements are unproven;
 observe paper results after manual review/merge. Do not reset the state or run the
 production workflow merely to test this PR.
-
