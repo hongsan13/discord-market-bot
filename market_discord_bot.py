@@ -27,6 +27,13 @@ SCALE_IN_MIN_PNL = (2.0, 4.0, 6.0)
 SCALE_IN_INTERVAL_HOURS = 24
 INTERMEDIATE_PROFIT_GUARDS = {"B": (6.0, -5.0), "S": (8.0, -6.0), "A": (8.0, -6.0)}
 
+# Supplement time cooldowns only after a loss/acute-alert exit, across all buy modes.
+REENTRY_RECOVERY_ACTIONS = {"paper_stop_loss", "paper_rebound_stop_loss", "paper_sell_alert"}
+REENTRY_RECOVERY_MIN_PCT = 3.0
+B_REENTRY_RECOVERY_MIN_PCT = 5.0
+B_NEUTRAL_REENTRY_RECOVERY_MIN_PCT = 6.0
+B_NEUTRAL_REENTRY_ALLOCATION_MULTIPLIER = 0.50
+
 ALERT_15M_DROP_PCT = -3.0
 ALERT_DAY_DROP_PCT = -6.0
 ALERT_COOLDOWN_MINUTES = 180
@@ -1316,6 +1323,75 @@ def candidate_score_v6(row, sector_stats=None):
     return base
 
 
+def confirm_exit_recovery(row, sector_stats, state, current, risk_regime):
+    """Read the latest exit without duplicating/mutating history; gate risky reentries only."""
+    ticker = row.get("ticker")
+    latest = None
+    for trade in state.get("realized_trades", []):
+        if not isinstance(trade, dict) or trade.get("ticker") != ticker:
+            continue
+        action = trade.get("action") or infer_sell_action_from_reason(trade.get("reason"))
+        # Old records may have neither an action nor a readable reason.
+        if not action and (safe_float(trade.get("realized_pnl_jpy")) or 0) < 0:
+            action = "paper_stop_loss"
+        sold_at = parse_dt(trade.get("sold_at"))
+        if sold_at is None:
+            if action in REENTRY_RECOVERY_ACTIONS:
+                return {"ok": False, "reason": "exit_timestamp_missing"}
+            continue
+        if sold_at.tzinfo is None:
+            sold_at = sold_at.replace(tzinfo=JST)  # Legacy bot dates were local JST.
+        if latest is None or sold_at >= latest[0]:
+            latest = (sold_at, action, trade)
+    if latest is None or latest[1] not in REENTRY_RECOVERY_ACTIONS:
+        return {"ok": True, "allocation_multiplier": 1.0}
+
+    sold_at, action, trade = latest
+    if current - sold_at < timedelta(hours=TICKER_COOLDOWN_HOURS[action]):
+        return {"ok": False, "reason": "ticker_cooldown"}
+    market_price = safe_float(trade.get("sell_market_price_jpy"))
+    if market_price is None:
+        # Reconstruct only when the recorded friction is known, never treat a net fill as market price.
+        fill = safe_float(trade.get("sell_price_jpy"))
+        friction = safe_float(trade.get("execution_friction_pct"))
+        if fill is not None and friction is not None and 0 <= friction < 100:
+            market_price = fill / (1 - friction / 100)
+    price = safe_float(row.get("last_jpy"))
+    if market_price is None or market_price <= 0 or price is None or price <= 0:
+        return {"ok": False, "reason": "recovery_price_missing"}
+    grade = row.get("grade") or TICKER_GRADES.get(ticker, "B")
+    regime = (risk_regime or {}).get("label", "neutral")
+    if grade not in {"S", "A", "B", "R"} or regime not in RISK_REGIME_MIN_CASH:
+        return {"ok": False, "reason": "recovery_grade_or_regime_unknown"}
+    threshold = REENTRY_RECOVERY_MIN_PCT
+    multiplier = 1.0
+    if grade == "B":
+        if regime not in {"neutral", "risk_on", "strong_risk_on"}:
+            return {"ok": False, "reason": "b_reentry_regime"}
+        threshold = B_REENTRY_RECOVERY_MIN_PCT
+        if regime == "neutral":
+            threshold = B_NEUTRAL_REENTRY_RECOVERY_MIN_PCT
+            multiplier = B_NEUTRAL_REENTRY_ALLOCATION_MULTIPLIER
+    if price < market_price * (1 + threshold / 100):
+        return {"ok": False, "reason": "recovery_price_below_threshold"}
+    if any(safe_float(row.get(key)) is None or safe_float(row.get(key)) <= 0
+           for key in ("change_5d", "change_15m")):
+        return {"ok": False, "reason": "recovery_momentum"}
+    info = get_sector_status(row, sector_stats)
+    allowed_sectors = {"strong"} if grade == "B" else {"neutral", "strong"}
+    if info["sector"] not in sector_stats or info.get("status") not in allowed_sectors:
+        return {"ok": False, "reason": "recovery_sector"}
+    if cooldown_remaining_hours(state, info["sector"], current) > 0:
+        return {"ok": False, "reason": "sector_cooldown"}
+    if any(safe_float(row.get(key)) is None for key in
+           ("change_10d", "change_20d", "high_20d_ratio")):
+        return {"ok": False, "reason": "recovery_overheat_data_missing"}
+    if is_short_term_overheated(row)[0] or is_sector_overheated(row, info) or is_week_open_risk(row, current):
+        return {"ok": False, "reason": "recovery_overheat_or_week_open"}
+    return {"ok": True, "allocation_multiplier": multiplier,
+            "reason": f"exit recovery confirmed >= {threshold:g}%"}
+
+
 def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_sectors, risk_regime=None):
     """v5の判定を利用しつつ、v6のグローバルな安全弁を全買いルートへ強制する。"""
     ticker = row.get("ticker")
@@ -1325,6 +1401,10 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     ticker_cd = ticker_cooldown_remaining_hours(state, ticker, current)
     if ticker_cd > 0:
         return {"ok": False, "reason": f"同一銘柄クールダウン中: 残り{ticker_cd:.1f}時間"}
+
+    recovery = confirm_exit_recovery(row, sector_stats, state, current, risk_regime)
+    if not recovery["ok"]:
+        return recovery
 
     sector_cd = cooldown_remaining_hours(state, sector, current)
     if sector_cd > 0:
@@ -1352,7 +1432,7 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     if regime == "cautious" and mode == "high_cash_deploy":
         return {"ok": False, "reason": "Cautious中は高現金モードの機械的な買い増しを停止"}
 
-    multiplier = RISK_REGIME_ALLOCATION_MULTIPLIER.get(regime, 0.90)
+    multiplier = RISK_REGIME_ALLOCATION_MULTIPLIER.get(regime, 0.90) * recovery["allocation_multiplier"]
     if sector_cd > 0:
         multiplier *= 0.50
     decision["allocation_ratio"] = decision.get("allocation_ratio", BUY_ALLOCATION_RATIO) * multiplier
@@ -1360,6 +1440,8 @@ def classify_buy_candidate(row, sector_stats, state, current, portfolio, held_se
     decision["risk_regime"] = regime
     decision["candidate_score"] = candidate_score_v6(row, sector_stats)
     decision["reason"] = f"{decision.get('reason', '')} / v6 regime={regime}"
+    if recovery.get("reason"):
+        decision["reason"] += f" / {recovery['reason']}"
     return decision
 
 
@@ -1662,37 +1744,39 @@ def classify_scale_in(pos, row, sector_stats, state, current, risk_regime):
     grade = row.get("grade") or TICKER_GRADES.get(row["ticker"], "B")
     regime = risk_regime.get("label")
     count = int(pos.get("scale_in_count", 0))
-    if grade not in {"S", "A"} or regime not in {"risk_on", "strong_risk_on"}:
-        return {"ok": False}
+    if grade not in {"S", "A"}:
+        return {"ok": False, "reason": "grade"}
+    if regime not in {"risk_on", "strong_risk_on"}:
+        return {"ok": False, "reason": "risk_regime"}
     if count < 0 or count >= len(SCALE_IN_RATIOS):
-        return {"ok": False}
+        return {"ok": False, "reason": "stage_limit"}
     if pos.get("buy_mode") == "oversold_rebound" or pos.get("rebound_trade"):
-        return {"ok": False}
+        return {"ok": False, "reason": "rebound_holding"}
     if (safe_float(pos.get("pnl_pct")) or 0.0) < SCALE_IN_MIN_PNL[count]:
-        return {"ok": False}
+        return {"ok": False, "reason": "pnl_below_threshold"}
     if count == 2 and regime != "strong_risk_on":
-        return {"ok": False}
+        return {"ok": False, "reason": "third_stage_regime"}
     last = parse_dt(pos.get("last_scale_in_at") or pos.get("bought_at"))
     if last is None or current - last < timedelta(hours=SCALE_IN_INTERVAL_HOURS):
-        return {"ok": False}
+        return {"ok": False, "reason": "interval_or_timestamp"}
     info = get_sector_status(row, sector_stats)
     if info.get("status") != "strong":
-        return {"ok": False}
+        return {"ok": False, "reason": "sector_not_strong"}
     if ticker_cooldown_remaining_hours(state, row["ticker"], current) > 0:
-        return {"ok": False}
+        return {"ok": False, "reason": "ticker_cooldown"}
     if cooldown_remaining_hours(state, info["sector"], current) > 0:
-        return {"ok": False}
+        return {"ok": False, "reason": "sector_cooldown"}
     # Missing short-term metrics cannot establish that a holding is not overheated.
     if any(safe_float(row.get(key)) is None for key in (
         "change_5d", "change_10d", "change_20d", "high_20d_ratio", "pct_change", "change_15m"
     )):
-        return {"ok": False}
+        return {"ok": False, "reason": "market_data_missing"}
     if is_week_open_risk(row, current) or is_short_term_overheated(row)[0] or is_sector_overheated(row, info):
-        return {"ok": False}
+        return {"ok": False, "reason": "overheat_or_week_open"}
     if not BUY_DAILY_MIN_PCT <= row["pct_change"] <= BUY_DAILY_MAX_PCT:
-        return {"ok": False}
+        return {"ok": False, "reason": "daily_momentum"}
     if not BUY_15M_MIN_PCT <= row["change_15m"] <= BUY_15M_MAX_PCT:
-        return {"ok": False}
+        return {"ok": False, "reason": "intraday_momentum"}
     return {
         "ok": True,
         "mode": "scale_in",
@@ -1718,12 +1802,19 @@ def merge_scale_in(pos, qty, cost, market_price, current):
     pos["peak_pnl_pct"] = (pos["peak_price_jpy"] / pos["buy_price_jpy"] - 1.0) * 100.0
 
 
+def note_scale_in_result(outcomes, ticker, reason):
+    """One terminal outcome per starting holding; do not count newly opened positions."""
+    if ticker in outcomes:
+        outcomes[ticker] = reason
+
+
 def update_paper_portfolio(state, market_data, current):
     market_map = {row["ticker"]: row for row in market_data}
     cash = int(state.get("cash", STARTING_CAPITAL))
     positions = refresh_positions(state.get("positions", []), market_map)
     decisions = []
     sold_tickers = set()
+    scale_in_outcomes = {pos["ticker"]: "market_data_missing" for pos in positions}
 
     # 売却フェーズ。売った銘柄は同一実行内で絶対に買い戻さない。
     kept_positions = []
@@ -1768,6 +1859,7 @@ def update_paper_portfolio(state, market_data, current):
         )
 
         sold_tickers.add(ticker)
+        note_scale_in_result(scale_in_outcomes, ticker, "same_run_sale")
         set_ticker_cooldown(state, ticker, current, action["action"], execution_sell_price)
 
         if action["action"] in {"paper_sell_alert", "paper_stop_loss", "paper_rebound_stop_loss"}:
@@ -1806,13 +1898,14 @@ def update_paper_portfolio(state, market_data, current):
 
     for cand in candidates:
         max_positions_for_regime = risk_regime.get("max_positions", MAX_POSITIONS)
-        if total_buys_today >= MAX_TOTAL_BUYS_PER_DAY:
-            break
-
         ticker = cand["ticker"]
         if ticker in sold_tickers:
             continue
+        if total_buys_today >= MAX_TOTAL_BUYS_PER_DAY:
+            note_scale_in_result(scale_in_outcomes, ticker, "daily_buy_limit")
+            continue
         if ticker_cooldown_remaining_hours(state, ticker, current) > 0:
+            note_scale_in_result(scale_in_outcomes, ticker, "ticker_cooldown")
             continue
 
         existing = next((pos for pos in positions if pos["ticker"] == ticker), None)
@@ -1825,6 +1918,7 @@ def update_paper_portfolio(state, market_data, current):
                 cand, sector_stats, state, current, portfolio_before_buy, held_sectors, risk_regime=risk_regime
             )
         if not buy_decision.get("ok"):
+            note_scale_in_result(scale_in_outcomes, ticker, buy_decision["reason"])
             continue
 
         buy_mode = buy_decision.get("mode")
@@ -1847,10 +1941,12 @@ def update_paper_portfolio(state, market_data, current):
         if existing is None and counts[theme] >= MAX_THEME_POSITIONS:
             continue
         if bucket_buys_today[bucket] >= MAX_SAME_BUCKET_BUYS_PER_DAY:
+            note_scale_in_result(scale_in_outcomes, ticker, "daily_bucket_limit")
             continue
 
         market_price = safe_float(cand.get("last_jpy"))
         if market_price is None or market_price <= 0:
+            note_scale_in_result(scale_in_outcomes, ticker, "market_data_missing")
             continue
 
         friction_pct = estimate_execution_friction_pct(
@@ -1860,12 +1956,14 @@ def update_paper_portfolio(state, market_data, current):
         )
         execution_buy_price = apply_execution_friction(market_price, "buy", friction_pct)
         if execution_buy_price is None:
+            note_scale_in_result(scale_in_outcomes, ticker, "execution_price_missing")
             continue
 
         min_cash_ratio = buy_decision.get("min_cash_ratio", MIN_CASH_RATIO)
         min_cash_for_buy = int(total_value * min_cash_ratio)
         available_cash = cash - min_cash_for_buy
         if available_cash <= 0:
+            note_scale_in_result(scale_in_outcomes, ticker, "minimum_cash")
             continue
 
         allocation_ratio = buy_decision.get("allocation_ratio", BUY_ALLOCATION_RATIO)
@@ -1884,26 +1982,38 @@ def update_paper_portfolio(state, market_data, current):
         qty = int(allocation // execution_buy_price)
         if qty <= 0:
             # 1株単価が高すぎて格付け別上限を超える銘柄は、実運用リスクが大きいため見送る。
+            if available_cash < execution_buy_price:
+                reason = "minimum_cash"
+            elif int(total_value * position_cap) - existing_value < execution_buy_price:
+                reason = "position_weight_limit"
+            else:
+                reason = "tranche_below_one_share"
+            note_scale_in_result(scale_in_outcomes, ticker, reason)
             continue
 
         cost = int(qty * execution_buy_price)
         if cost > cash or cash - cost < min_cash_for_buy:
+            note_scale_in_result(scale_in_outcomes, ticker, "minimum_cash")
             continue
 
         # セクター/テーマの集中を新規買い時点で制限する。
         bucket_cap = BUCKET_MAX_WEIGHTS.get(bucket, 0.25)
         current_bucket_value = bucket_exposure_value(positions, bucket)
         if current_bucket_value + cost > int(total_value * bucket_cap):
+            note_scale_in_result(scale_in_outcomes, ticker, "bucket_weight_limit")
             continue
 
         if existing is not None:
             # Friction reduces post-trade equity. Use that denominator for scale-in caps.
             post_total = total_value - cost + int(qty * market_price)
             if cash - cost < math.ceil(post_total * min_cash_ratio):
+                note_scale_in_result(scale_in_outcomes, ticker, "minimum_cash")
                 continue
             if existing_value + cost > post_total * position_cap:
+                note_scale_in_result(scale_in_outcomes, ticker, "position_weight_limit")
                 continue
             if current_bucket_value + cost > post_total * bucket_cap:
+                note_scale_in_result(scale_in_outcomes, ticker, "bucket_weight_limit")
                 continue
 
         cash -= cost
@@ -1934,6 +2044,7 @@ def update_paper_portfolio(state, market_data, current):
         }
         if existing is not None:
             merge_scale_in(existing, qty, cost, market_price, current)
+            note_scale_in_result(scale_in_outcomes, ticker, "executed")
         else:
             positions.append(position)
             held.add(ticker)
@@ -1979,6 +2090,12 @@ def update_paper_portfolio(state, market_data, current):
     state["positions"] = positions
     portfolio = build_portfolio_snapshot(state, market_data)
     portfolio["risk_regime"] = risk_regime
+    portfolio["scale_in_diagnostics"] = {
+        "candidate_count": len(scale_in_outcomes),
+        "executed_count": sum(reason == "executed" for reason in scale_in_outcomes.values()),
+        "blocked_counts": dict(Counter(reason for reason in scale_in_outcomes.values() if reason != "executed")),
+        "by_ticker": scale_in_outcomes,
+    }
 
     if not decisions:
         decisions.append(
@@ -2104,6 +2221,10 @@ def build_report(state, market_data, usd_jpy, portfolio, decisions, current):
             "reentry_dd_trigger_pct": REENTRY_DD_TRIGGER_PCT,
             "reentry_min_cash_ratio": REENTRY_MIN_CASH_RATIO,
             "reentry_allocation_ratio": REENTRY_ALLOCATION_RATIO,
+            "exit_recovery_min_pct": REENTRY_RECOVERY_MIN_PCT,
+            "b_exit_recovery_min_pct": B_REENTRY_RECOVERY_MIN_PCT,
+            "b_neutral_exit_recovery_min_pct": B_NEUTRAL_REENTRY_RECOVERY_MIN_PCT,
+            "b_neutral_reentry_allocation_multiplier": B_NEUTRAL_REENTRY_ALLOCATION_MULTIPLIER,
             "high_cash_deploy_trigger_ratio": HIGH_CASH_DEPLOY_TRIGGER_RATIO,
             "high_cash_deploy_allocation_ratio": HIGH_CASH_DEPLOY_ALLOCATION_RATIO,
             "defense_overheat_avg_pct": DEFENSE_OVERHEAT_AVG_PCT,
