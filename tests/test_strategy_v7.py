@@ -43,6 +43,14 @@ def state(positions=None):
     return s
 
 
+def exit_trade(ticker="NVDA", **changes):
+    trade = dict(ticker=ticker, action="paper_stop_loss", sell_market_price_jpy=1000.0,
+                 sell_price_jpy=998.0, execution_friction_pct=0.2,
+                 realized_pnl_jpy=-8000, sold_at=(NOW - timedelta(days=4)).isoformat())
+    trade.update(changes)
+    return trade
+
+
 class StrategyTests(unittest.TestCase):
     def setUp(self):
         # All tests are offline. Any accidental live entry point fails immediately.
@@ -64,6 +72,241 @@ class StrategyTests(unittest.TestCase):
 
     def buys(self, result):
         return [d for d in result[2] if d["action"] == "paper_buy"]
+
+    def recovery(self, r=None, trade=None, regime="risk_on", sector_status="strong"):
+        r = r or row()
+        s = state([])
+        s["realized_trades"] = [trade or exit_trade(r["ticker"])]
+        sectors = bot.analyze_sectors([r])
+        sectors[r["sector"]]["status"] = sector_status
+        return bot.confirm_exit_recovery(r, sectors, s, NOW, {"label": regime})
+
+    def test_exit_recovery_time_and_price_boundaries(self):
+        for action in bot.REENTRY_RECOVERY_ACTIONS:
+            for elapsed, price, allowed in (
+                (bot.TICKER_COOLDOWN_HOURS[action] - 0.01, 1040, False),
+                (bot.TICKER_COOLDOWN_HOURS[action], 1029.99, False),
+                (bot.TICKER_COOLDOWN_HOURS[action], 1030, True),
+            ):
+                with self.subTest(action=action, elapsed=elapsed, price=price):
+                    trade = exit_trade(action=action, sold_at=(NOW - timedelta(hours=elapsed)).isoformat())
+                    self.assertEqual(self.recovery(row(last_jpy=price), trade)["ok"], allowed)
+
+    def test_loss_reentry_runs_through_cooldown_then_recovery_for_sa(self):
+        for ticker in ("NVDA", "ANET"):
+            for elapsed, price, allowed in ((1, 1040, False), (72, 1029.99, False), (72, 1030, True)):
+                with self.subTest(ticker=ticker, elapsed=elapsed, price=price):
+                    s = state([])
+                    sold_at = NOW - timedelta(hours=elapsed)
+                    s["realized_trades"] = [exit_trade(ticker, sold_at=sold_at.isoformat())]
+                    bot.set_ticker_cooldown(s, ticker, sold_at, "paper_stop_loss")
+                    result = self.run_portfolio(s, row(ticker, last_jpy=price))
+                    self.assertEqual(bool(self.buys(result)), allowed)
+                    if allowed:
+                        self.assertGreater(self.buys(result)[0]["execution_cost_jpy"], 0)
+                        self.assertIn("exit recovery confirmed", self.buys(result)[0]["reason"])
+
+    def test_reentry_requires_positive_finite_momentum_and_overheat_data(self):
+        for key in ("change_5d", "change_15m"):
+            for value in (None, 0, -0.01, float("nan"), float("inf")):
+                with self.subTest(key=key, value=value):
+                    self.assertFalse(self.recovery(row(**{key: value}))["ok"])
+            self.assertTrue(self.recovery(row(**{key: 0.001}))["ok"])
+        for key in ("change_10d", "change_20d", "high_20d_ratio"):
+            self.assertFalse(self.recovery(row(**{key: None}))["ok"])
+        self.assertFalse(self.recovery(row(change_5d=20, high_20d_ratio=0.99))["ok"])
+        for status in ("weak", "crash", "unknown"):
+            self.assertFalse(self.recovery(sector_status=status)["ok"])
+
+    def test_actual_loss_record_survives_reload_and_gates_next_entry(self):
+        s, _, decisions = self.run_portfolio(r=row(last_jpy=900))
+        self.assertEqual([d["action"] for d in decisions], ["paper_stop_loss"])
+        trade = s["realized_trades"][-1]
+        self.assertEqual(trade["sell_market_price_jpy"], 900)
+        self.assertLess(trade["sell_price_jpy"], 900)
+        for price, allowed in ((926.99, False), (927, True)):
+            restored = bot.migrate_state(json.loads(json.dumps(s)))
+            result = self.run_portfolio(restored, row(last_jpy=price), current=NOW + timedelta(days=4))
+            self.assertEqual(bool(self.buys(result)), allowed)
+            self.assertEqual(restored["realized_trades"], s["realized_trades"])
+
+    def test_b_reentry_stricter_sector_regime_and_neutral_sizing(self):
+        for regime, price, allowed in (
+            ("risk_on", 1049.99, False), ("risk_on", 1050, True),
+            ("strong_risk_on", 1050, True), ("neutral", 1059.99, False),
+            ("neutral", 1060, True), ("cautious", 1100, False), ("risk_off", 1100, False),
+        ):
+            with self.subTest(regime=regime, price=price):
+                r = row("7012.T", last_jpy=price)
+                self.assertEqual(self.recovery(r, regime=regime)["ok"], allowed)
+                s = state([])
+                s["realized_trades"] = [exit_trade("7012.T")]
+                self.assertEqual(bool(self.buys(self.run_portfolio(s, r, regime=regime))), allowed)
+        for status in ("neutral", "weak", "crash", "unknown"):
+            self.assertFalse(self.recovery(row("7012.T", last_jpy=1060), sector_status=status)["ok"])
+        r = row("7012.T", last_jpy=1060)
+        sectors = bot.analyze_sectors([r])
+        for regime in ("neutral", "risk_on", "strong_risk_on", "cautious"):
+            s = state([])
+            p = bot.build_portfolio_snapshot(s, [r])
+            fresh = bot.classify_buy_candidate(r, sectors, s, NOW, p, {}, {"label": regime})
+            self.assertTrue(fresh["ok"])  # New B entries remain on the existing rules, even in cautious.
+            s["realized_trades"] = [exit_trade("7012.T")]
+            recovered = bot.classify_buy_candidate(r, sectors, s, NOW, p, {}, {"label": regime})
+            if regime == "cautious":
+                self.assertFalse(recovered["ok"])
+            else:
+                multiplier = 0.5 if regime == "neutral" else 1.0
+                self.assertAlmostEqual(recovered["allocation_ratio"], fresh["allocation_ratio"] * multiplier)
+
+    def test_reentry_market_reference_and_legacy_history_fail_safely(self):
+        # A net fill must not lower the recovery hurdle; reconstruct only from known friction.
+        for market in (1000, None):
+            t = exit_trade(sell_market_price_jpy=market)
+            self.assertFalse(self.recovery(row(last_jpy=1029), t)["ok"])
+            self.assertTrue(self.recovery(row(last_jpy=1030), t)["ok"])
+        for changes in (
+            {"sell_market_price_jpy": None, "execution_friction_pct": None},
+            {"sell_market_price_jpy": 0}, {"sold_at": "invalid"},
+            {"sold_at": (NOW + timedelta(days=1)).isoformat()},
+        ):
+            self.assertFalse(self.recovery(trade=exit_trade(**changes))["ok"])
+        for changes in ({"action": None, "reason": "損切りライン到達"},
+                        {"action": None, "reason": "legacy unreadable reason"},
+                        {"sold_at": (NOW - timedelta(days=4)).replace(tzinfo=None).isoformat()}):
+            self.assertFalse(self.recovery(row(last_jpy=1020), exit_trade(**changes))["ok"])
+
+    def test_latest_exit_selected_by_time_and_profit_exit_does_not_gate(self):
+        r = row(last_jpy=1020)
+        s = state([])
+        loss = exit_trade()
+        profit = exit_trade(action="paper_take_profit", realized_pnl_jpy=1000,
+                            sold_at=(NOW - timedelta(days=2)).isoformat())
+        for trades in ([loss, profit], [profit, loss], [exit_trade("ANET")], []):
+            s["realized_trades"] = trades
+            before = copy.deepcopy(s)
+            self.assertTrue(bot.confirm_exit_recovery(r, bot.analyze_sectors([r]), s, NOW,
+                                                     {"label": "risk_on"})["ok"])
+            self.assertEqual(s, before)
+        # Missing new keys and legacy reports do not require a migration or reset.
+        s.pop("realized_trades")
+        s["reports"] = [{"date": "2026-08-01", "portfolio": {"cash": 1000000}}]
+        self.assertTrue(bot.confirm_exit_recovery(r, bot.analyze_sectors([r]), s, NOW,
+                                                 {"label": "risk_on"})["ok"])
+
+    def test_recovery_gate_covers_all_five_routes_without_affecting_new_names(self):
+        cases = [
+            ("normal_momentum", row(), 1000000),
+            ("reentry_recovery", row(pct_change=4), 1100000),
+            ("rebound_probe", row(pct_change=-5, change_5d=0), 1000000),
+            ("oversold_rebound", row(pct_change=6, change_5d=-9), 1000000),
+            ("high_cash_deploy", row(pct_change=2), 1100000),
+        ]
+        for mode, r, peak in cases:
+            with self.subTest(mode=mode):
+                s = state([])
+                s["portfolio_peak_value_jpy"] = peak
+                s["realized_trades"] = [exit_trade("ANET")]  # Other ticker must not interfere.
+                fresh = self.buys(self.run_portfolio(copy.deepcopy(s), r))
+                self.assertEqual([d["buy_mode"] for d in fresh], [mode])
+                s["realized_trades"].append(exit_trade(sell_market_price_jpy=2000))
+                self.assertFalse(self.buys(self.run_portfolio(s, r)))
+
+    def test_recovered_entry_still_obeys_shared_guards(self):
+        for guard in ("ticker", "sector", "daily", "daily_bucket", "bucket", "cash", "position"):
+            with self.subTest(guard=guard):
+                s, r = state([]), row()
+                s["realized_trades"] = [exit_trade()]
+                if guard == "ticker":
+                    bot.set_ticker_cooldown(s, "NVDA", NOW, "paper_stop_loss")
+                elif guard == "sector":
+                    bot.set_sector_cooldown(s, r["sector"], NOW, hours=1)
+                elif guard in {"daily", "daily_bucket"}:
+                    names = ["NVDA", "TSM", "MSFT"] if guard == "daily" else ["NVDA", "TSM"]
+                    s["reports"] = [{"date": NOW.strftime("%Y-%m-%d"), "decisions": [
+                        {"action": "paper_buy", "ticker": t} for t in names]}]
+                elif guard == "bucket":
+                    s = state([holding("TSM", qty=330)])
+                    s["realized_trades"] = [exit_trade()]
+                elif guard == "cash":
+                    s = state([holding("7011.T", qty=900)])
+                    s["realized_trades"] = [exit_trade()]
+                else:
+                    r = row(last_jpy=200000)  # A single share exceeds the unchanged 15% cap.
+                self.assertFalse(self.buys(self.run_portfolio(s, r)))
+
+    def test_scale_in_diagnostics_classification_reasons(self):
+        for changes, pos_changes, regime, reason in (
+            ({"grade": "B"}, {}, "risk_on", "grade"),
+            ({}, {}, "neutral", "risk_regime"),
+            ({"last_jpy": 1010}, {}, "risk_on", "pnl_below_threshold"),
+            ({"pct_change": 0.5}, {}, "risk_on", "sector_not_strong"),
+            ({"change_10d": None}, {}, "risk_on", "market_data_missing"),
+            ({"change_5d": 20, "high_20d_ratio": .99}, {}, "risk_on", "overheat_or_week_open"),
+            ({"pct_change": 8.1}, {}, "risk_on", "daily_momentum"),
+            ({"change_15m": 2.6}, {}, "risk_on", "intraday_momentum"),
+            ({}, {"scale_in_count": 3}, "risk_on", "stage_limit"),
+            ({}, {"bought_at": NOW.isoformat()}, "risk_on", "interval_or_timestamp"),
+        ):
+            with self.subTest(reason=reason):
+                result = self.run_portfolio(state([holding(**pos_changes)]), row(**changes), regime)
+                diag = result[1]["scale_in_diagnostics"]
+                self.assertEqual(diag["by_ticker"], {"NVDA": reason})
+                self.assertEqual(diag["blocked_counts"], {reason: 1})
+                self.assertEqual(diag["executed_count"], 0)
+
+    def test_scale_in_diagnostics_execution_persistence_and_missing_rows(self):
+        s = state([holding(), holding("ANET")])
+        s, p, decisions = self.run_portfolio(s, row())
+        diag = p["scale_in_diagnostics"]
+        self.assertEqual(diag, {"candidate_count": 2, "executed_count": 1,
+                              "blocked_counts": {"market_data_missing": 1},
+                              "by_ticker": {"NVDA": "executed", "ANET": "market_data_missing"}})
+        report = bot.build_report(s, [row()], 150, p, decisions, NOW)
+        with patch.object(bot, "write_state") as write:
+            bot.save_state(s, report)
+            write.assert_called_once_with(s)
+        encoded = json.loads(json.dumps(s))
+        self.assertEqual(encoded["reports"][-1]["portfolio"]["scale_in_diagnostics"], diag)
+        self.assertNotIn("scale_in_diagnostics", s)  # No transient root state or stale monitor-only summary.
+        self.assertNotIn("scale_in_diagnostics", bot.build_portfolio_snapshot(s, [row()]))
+        self.assertNotIn("scale_in_diagnostics", bot.make_discord_message(report))
+        fresh = self.run_portfolio(state([]))
+        self.assertEqual(fresh[1]["scale_in_diagnostics"]["candidate_count"], 0)
+
+    def test_scale_in_diagnostics_shared_guard_reasons_and_same_run_sale(self):
+        for guard, reason in (
+            ("ticker", "ticker_cooldown"), ("sector", "sector_cooldown"),
+            ("daily", "daily_buy_limit"), ("daily_bucket", "daily_bucket_limit"),
+            ("position", "position_weight_limit"), ("bucket", "bucket_weight_limit"),
+            ("cash", "minimum_cash"), ("share", "tranche_below_one_share"),
+            ("sale", "same_run_sale"),
+        ):
+            with self.subTest(guard=guard):
+                s, r = state(), row()
+                if guard == "ticker":
+                    bot.set_ticker_cooldown(s, "NVDA", NOW, "paper_take_profit")
+                elif guard == "sector":
+                    bot.set_sector_cooldown(s, r["sector"], NOW)
+                elif guard in {"daily", "daily_bucket"}:
+                    names = ["NVDA", "TSM", "MSFT"] if guard == "daily" else ["NVDA", "TSM"]
+                    s["reports"] = [{"date": NOW.strftime("%Y-%m-%d"), "decisions": [
+                        {"action": "paper_buy", "ticker": t} for t in names]}]
+                elif guard == "position":
+                    s = state([holding(qty=144)])
+                elif guard == "bucket":
+                    s = state([holding(), holding("TSM", qty=285)])
+                elif guard == "cash":
+                    s["cash"] = 22000
+                elif guard == "share":
+                    s = state([holding(qty=1, buy_price_jpy=40000, current_price_jpy=42000,
+                                       peak_price_jpy=42000)])
+                    r = row(last_jpy=42000)
+                else:
+                    r = row(last_jpy=900)
+                result = self.run_portfolio(s, r)
+                self.assertEqual(result[1]["scale_in_diagnostics"]["by_ticker"]["NVDA"], reason)
+                self.assertFalse(self.buys(result))
 
     def test_scale_in_at_five_positions_s_and_a(self):
         for ticker in ("NVDA", "ANET"):
