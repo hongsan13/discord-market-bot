@@ -62,9 +62,12 @@ v7テストを必須とし、`weekly/` があるブランチでは週報テス�
 任意の未知のコードに対するセキュリティサンドボックスではないため、未確認のPRを
 そのまま実行しないでください。`python market_discord_bot.py` は実行しません。
 
-`Development checks` CIもWindows runner/Python 3.11で同じセットアップを検証します。
+`Development checks` CIは本番週報と同じUbuntu runner/Python 3.11で、日本語PDF用の
+IPAexフォントを導入してから同じセットアップを検証します。Windows runnerに日本語
+フォントがない場合、売買テストと無関係にPDFテストが失敗するためです。
 PRのPython/依存関係/このCI設定の変更時に動き、Secretsなし・リポジトリ読取権限のみです。
-定期実行やBot起動はありません。Windows runnerはWindows 11実機そのものではありません。
+定期実行やBot起動はありません。Windows開発環境の検証は各PCで上記のコマンドを
+実行してください。Ubuntu CIの成功はWindows 11実機での成功を保証しません。
 
 ## 別PCへ移るとき
 
