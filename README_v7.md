@@ -41,7 +41,87 @@ cash/holding headroom; a bucket or post-friction cap violation skips the candida
 No fractional shares or forced one-share exceptions are added. Consequently, a high
 share price or the other guards can still leave substantial cash uninvested.
 
-## Intermediate protection
+## Loss-exit recovery confirmation (2026-09-14)
+
+Before any of the five fresh-entry buy modes, the latest sale of that ticker is read
+from `realized_trades`, ordered by `sold_at`. When that sale is `paper_stop_loss`,
+`paper_rebound_stop_loss`, or `paper_sell_alert`, both the unchanged time cooldown
+and the following extra conditions must pass. This supplements the existing route
+rules; it does not create a new buy route or guarantee execution.
+
+| Grade / regime | Recovery from sell market price | Sector | Extra sizing factor |
+| --- | --- | --- | --- |
+| S/A (R rebound route also uses this baseline) | >= 3% | neutral / strong | 1.0 |
+| B, risk_on / strong_risk_on | >= 5% | strong only | 1.0 |
+| B, neutral | >= 6% | strong only | 0.5 |
+| B, cautious / risk_off | prohibited | — | — |
+
+Both `change_5d` and `change_15m` must be strictly positive and finite. Sector data
+must be present. Short-term overheat inputs must be present, and existing short-term
+overheat, sector overheat and week-open blocks must pass. No sector cooldown exception
+is allowed for these loss reentries. Other regime restrictions, sizing, daily limits,
+cash floors, concentration limits and execution friction remain in the shared loop.
+The B neutral factor multiplies the existing regime-adjusted allocation, not equity.
+
+Thresholds are `REENTRY_RECOVERY_MIN_PCT`, `B_REENTRY_RECOVERY_MIN_PCT`,
+`B_NEUTRAL_REENTRY_RECOVERY_MIN_PCT`, and `B_NEUTRAL_REENTRY_ALLOCATION_MULTIPLIER`.
+Their values are included in each new report's `risk_rules`. They are conservative
+initial choices, not fitted to recent losses; profitability has not been established.
+
+No duplicate `last_exit_info` or root state key is added. Existing realized trades
+already retain timestamp, action, gross market price, friction-adjusted fill and P/L.
+If market price is absent, it is reconstructed only from a valid fill and recorded
+friction; a net fill is never silently used as market price. A known risky exit with
+missing price/time blocks that ticker rather than guessing. Legacy missing actions
+use the existing reason inference; an otherwise unidentified negative realized trade
+is conservatively treated as a normal stop loss. Naive historical dates are interpreted
+as JST by this helper. Missing history means no additional gate. A later profit exit
+supersedes an earlier loss exit; adding to a current holding continues through the
+unchanged scale-in rules. Existing JSON/history is neither rewritten nor reset.
+
+## Scale-in diagnostics
+
+New trade-evaluation reports contain `portfolio.scale_in_diagnostics`:
+
+```json
+{
+  "candidate_count": 4,
+  "executed_count": 0,
+  "blocked_counts": {"sector_not_strong": 2, "pnl_below_threshold": 1, "minimum_cash": 1},
+  "by_ticker": {"NVDA": "sector_not_strong", "ANET": "sector_not_strong",
+                "ETN": "pnl_below_threshold", "VRT": "minimum_cash"}
+}
+```
+
+This counts **all holdings at the start of the run**, including B/R and holdings sold
+during that run, not just eligible S/A candidates. Each ticker has exactly one first
+blocking reason or `executed`. Consequently, blocked counts plus executions equal
+candidate count; these are not counts of all simultaneously failing conditions.
+Newly opened positions do not enter this denominator. Missing market rows are counted
+as `market_data_missing`; same-run sales as `same_run_sale`. After daily capacity is
+exhausted, remaining holdings receive `daily_buy_limit` without executing any buys.
+
+Other reason codes: `grade`, `risk_regime`, `stage_limit`, `rebound_holding`,
+`pnl_below_threshold`, `third_stage_regime`, `interval_or_timestamp`,
+`sector_not_strong`, `ticker_cooldown`, `sector_cooldown`, `overheat_or_week_open`,
+`daily_momentum`, `intraday_momentum`, `daily_bucket_limit`, `execution_price_missing`,
+`minimum_cash`, `position_weight_limit`, `bucket_weight_limit`, `tranche_below_one_share`.
+The last reason distinguishes whole-share rounding from insufficient cash or holding
+headroom. Sizing, including the existing 3%/3%/4% tranches, is unchanged.
+
+Details persist through the existing reports/latest path. Monitor-only snapshots and
+old reports omit the diagnostics: absence means **not evaluated/unknown**, not zero
+executions. Discord output remains unchanged in length; use the JSON for aggregation.
+PR #5's proposed single-share exception is not included in this change.
+
+Verification for this enhancement: `python scripts/check_dev.py` passes 108 tests
+(96 existing, 12 added, with additional boundary subcases), including Python 3.11
+syntax validation and protected-file hashes. Tests cover cooldown plus price recovery,
+B regime/sector/sizing, all five fresh-buy routes, legacy/real sale records, diagnostic
+persistence, shared execution guards, and unchanged intermediate protection.
+Local runtime: Python 3.12 on Windows; CI results are tracked separately in the PR.
+
+## Intermediate protection (unchanged)
 
 | Grade | Peak P/L activation | Drawdown from peak price |
 | --- | --- | --- |
